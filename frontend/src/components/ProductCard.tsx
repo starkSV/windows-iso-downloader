@@ -18,7 +18,6 @@ interface ProductCardProps {
   description: string
   badge: BadgeVariant
   archs?: string[]
-  onClick: () => void
 }
 
 export default function ProductCard({
@@ -28,13 +27,11 @@ export default function ProductCard({
   description,
   badge,
   archs = ['x64'],
-  onClick,
 }: ProductCardProps) {
   return (
     <motion.div
       whileHover={{ y: -3, scale: 1.005 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-      onClick={onClick}
       className="group relative cursor-pointer rounded-2xl border border-white/7 bg-[#111113] p-6
         hover:border-white/13 hover:shadow-2xl hover:shadow-black/40
         transition-colors duration-300"
