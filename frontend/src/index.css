@@ -1,0 +1,57 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+
+@theme {
+  /* Background layers */
+  --color-bg:        #09090b;
+  --color-surface:   #111113;
+  --color-surface-2: #18181b;
+
+  /* Borders */
+  --color-border:       rgba(255, 255, 255, 0.07);
+  --color-border-hover: rgba(255, 255, 255, 0.13);
+
+  /* Accent */
+  --color-accent:       #3b82f6;
+  --color-accent-hover: #2563eb;
+
+  /* Text */
+  --color-text:         #fafafa;
+  --color-text-2:       #a1a1aa;
+  --color-text-muted:   #52525b;
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error:   #ef4444;
+
+  /* Font families */
+  --font-sans: 'Geist Variable', 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: #09090b;
+  color: #fafafa;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-padding-bottom: 120px;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Thin, minimal scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
