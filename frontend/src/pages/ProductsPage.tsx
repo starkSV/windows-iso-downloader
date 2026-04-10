@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Search, ArrowRight } from 'lucide-react'
 import type { Product } from '../types'
@@ -16,8 +16,11 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [query, setQuery] = useState('')
-
   useEffect(() => {
+    document.title = "All Windows Releases | Windows ISO Downloader"
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) metaDesc.setAttribute('content', "Browse all official Microsoft Windows ISO releases available for direct download.")
+    
     fetch('/data/products.json')
       .then(r => r.json())
       .then((data: Record<string, string>) => {
@@ -99,8 +102,8 @@ export default function ProductsPage() {
                   show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 28 } },
                 }}
               >
-                <button
-                  onClick={() => navigate(`/product/${product.id}`)}
+                <Link
+                  to={`/product/${product.id}`}
                   className="group w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-white/6 bg-white/3 hover:bg-white/6 hover:border-white/12 transition-all text-left"
                 >
                   <div className="flex items-center gap-3">
@@ -112,7 +115,7 @@ export default function ProductsPage() {
                     </span>
                   </div>
                   <ArrowRight size={14} className="text-white/20 group-hover:text-white/50 group-hover:translate-x-0.5 transition-all" />
-                </button>
+                </Link>
               </motion.div>
             ))}
           </motion.div>

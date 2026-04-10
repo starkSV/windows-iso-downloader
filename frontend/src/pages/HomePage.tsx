@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ArrowRight } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
@@ -59,6 +60,14 @@ const cardVariant = {
 export default function HomePage() {
   const navigate = useNavigate()
 
+  useEffect(() => {
+    document.title = "Windows ISO Downloader | Official Microsoft Images"
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) {
+      metaDesc.setAttribute('content', "Download official Microsoft Windows ISO files. Fast, free, no registration required.")
+    }
+  }, [])
+
   return (
     <div className="max-w-4xl mx-auto px-5 pt-20 pb-16 relative" style={{ overflowX: 'hidden' }}>
 
@@ -79,7 +88,7 @@ export default function HomePage() {
           className="font-bold text-white tracking-tight leading-tight mb-4"
           style={{ fontSize: 'clamp(1.6rem, 7.5vw, 3.75rem)' }}
         >
-          Windows ISO <span className="text-white/25">Downloader</span>
+          Windows ISO <span className="text-white/50">Downloader</span>
         </h1>
         <p className="text-zinc-400 text-base max-w-sm mx-auto mb-6 leading-relaxed">
           Direct links from Microsoft's CDN. No ads. No registration.
@@ -116,10 +125,11 @@ export default function HomePage() {
       >
         {featured.map(product => (
           <motion.div key={product.id} variants={cardVariant}>
-            <ProductCard
-              {...product}
-              onClick={() => navigate(`/product/${product.id}`)}
-            />
+            <Link to={`/product/${product.id}`} className="block outline-none">
+              <ProductCard
+                {...product}
+              />
+            </Link>
           </motion.div>
         ))}
       </motion.div>
@@ -131,13 +141,13 @@ export default function HomePage() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
       >
-        <button
-          onClick={() => navigate('/products')}
+        <Link
+          to="/products"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/8 bg-white/4 text-sm text-zinc-400 hover:text-white hover:border-white/15 hover:bg-white/7 transition-all duration-200"
         >
-          Browse all {featured.length > 0 ? '17' : ''} releases
+          Browse all {featured.length > 0 ? '16' : ''} releases
           <ArrowRight size={14} />
-        </button>
+        </Link>
       </motion.div>
 
       {/* How it works */}

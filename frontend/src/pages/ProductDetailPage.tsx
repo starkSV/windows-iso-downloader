@@ -113,6 +113,14 @@ export default function ProductDetailPage() {
       .then((data: Record<string, string>) => {
         const name = data[productId!] ?? `Product ${productId}`
         setProductName(name)
+        
+        // Dynamic SEO injection
+        document.title = `${name} ISO Download | Windows ISO Downloader`
+        const descMeta = document.querySelector('meta[name="description"]')
+        if (descMeta) {
+          descMeta.setAttribute('content', `Download official ISO image for ${name}. Direct links pulled securely from Microsoft CDN servers.`)
+        }
+
         // Extract build from parentheses e.g. "(26200.6584)"
         const match = name.match(/\(([^)]+)\)/)
         if (match) setBuildStr(match[1])
