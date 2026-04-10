@@ -24,7 +24,6 @@ frontend/build/
 backend/main
 backend/*.exe
 backend/tmp/
-go.sum
 
 # ── OS files ───────────────────────────────────────────
 .DS_Store
