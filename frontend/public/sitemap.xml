@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Main Static Pages -->
+  <url>
+    <loc>https://msdl.tech-latest.com/</loc>
+    <priority>1.0</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://msdl.tech-latest.com/products</loc>
+    <priority>0.9</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://msdl.tech-latest.com/about</loc>
+    <priority>0.5</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://msdl.tech-latest.com/privacy-policy</loc>
+    <priority>0.3</priority>
+    <changefreq>yearly</changefreq>
+  </url>
+  <url>
+    <loc>https://msdl.tech-latest.com/disclaimer</loc>
+    <priority>0.3</priority>
+    <changefreq>yearly</changefreq>
+  </url>
+
+  <!-- Product Pages -->
+  <url><loc>https://msdl.tech-latest.com/product/48</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/52</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/2378</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/2618</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3113</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3114</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3115</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3131</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3132</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3133</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3262</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3263</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3264</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3265</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3266</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://msdl.tech-latest.com/product/3267</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+</urlset>
