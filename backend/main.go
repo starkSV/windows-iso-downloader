@@ -128,7 +128,12 @@ func cleanupSessions() {
 // Middleware for CORS
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		// Allowed origins
+		if origin == "https://msdl.tech-latest.com" || origin == "http://localhost:5173" || origin == "http://localhost:3000" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "OPTIONS" {
@@ -366,9 +371,14 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// Static UI Server
-	fs := http.FileServer(http.Dir("./public"))
-	mux.Handle("/", fs)
+	// Plain root response
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte("MSDL API v3 is running"))
+	})
 
 	handler := enableCORS(mux)
 
