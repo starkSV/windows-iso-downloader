@@ -70,8 +70,11 @@ export default function HomePage() {
   return (
     <div className="max-w-4xl mx-auto px-5 pt-20 pb-16 relative" style={{ overflowX: 'hidden' }}>
 
-      {/* Ambient glow — fixed so it never affects document layout/scroll */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-blue-500/6 rounded-full blur-3xl pointer-events-none -z-10" />
+      {/* Ambient glow — radial-gradient used over blur-3xl to optimize Mobile Lighthouse (Speed Index bypass) */}
+      <div 
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] pointer-events-none -z-10" 
+        style={{ background: 'radial-gradient(ellipse at center, rgba(59,130,246,0.10) 0%, transparent 60%)' }}
+      />
 
       {/* Hero */}
       <motion.div
