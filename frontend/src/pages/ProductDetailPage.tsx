@@ -61,6 +61,7 @@ const RELATED_GROUPS: Record<string, { id: string; label: string }[]> = {
     { id: '3262', label: 'Win 11 25H2' },
     { id: '52', label: 'Win 8.1' },
   ],
+
   '52': [
     { id: '48', label: 'Win 8.1 Single Language' },
     { id: '2618', label: 'Win 10 22H2' },
