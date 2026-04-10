@@ -16,7 +16,7 @@ export default function SiteFooter() {
         <Link to="/about" className="hover:text-zinc-500 transition-colors">About</Link>
         <span>·</span>
         <a
-          href="https://github.com"
+          href="https://github.com/starkSV/windows-iso-downloader"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-zinc-500 transition-colors"
