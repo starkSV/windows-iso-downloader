@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ArrowRight } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
@@ -58,7 +58,6 @@ const cardVariant = {
 }
 
 export default function HomePage() {
-  const navigate = useNavigate()
 
   useEffect(() => {
     document.title = "Windows ISO Downloader | Official Microsoft Images"

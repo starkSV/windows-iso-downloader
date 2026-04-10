@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Search, ArrowRight } from 'lucide-react'
 import type { Product } from '../types'
@@ -12,7 +12,6 @@ const quickSearches = [
 ]
 
 export default function ProductsPage() {
-  const navigate = useNavigate()
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [query, setQuery] = useState('')
