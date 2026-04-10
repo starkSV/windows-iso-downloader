@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { motion } from 'motion/react'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -10,6 +11,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function AboutPage() {
+  useEffect(() => {
+    document.title = "About MSDL | Windows ISO Downloader"
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) metaDesc.setAttribute('content', "Learn about MSDL, an open-source tool for fetching official Windows ISOs directly from Microsoft.")
+  }, [])
+
   return (
     <div className="max-w-2xl mx-auto px-4 pt-12 pb-10">
       <motion.div
