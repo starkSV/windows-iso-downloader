@@ -19,9 +19,8 @@ RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 
-# Copy binary and optional static public folder
+# Copy binary
 COPY --from=builder /app/msdl-backend .
-COPY --from=builder /app/public ./public
 
 RUN chown -R app:app /app
 USER app
