@@ -145,6 +145,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func respondJSONError(w http.ResponseWriter, status int, message string) {
+	log.Printf("ERROR [%d]: %s\n", status, message)
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
@@ -194,7 +195,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 
 		if resp.StatusCode != http.StatusOK {
 			if attempt == 2 {
-				respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d", resp.StatusCode))
+				respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes)))
 				return
 			}
 			continue
@@ -296,7 +297,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d", resp.StatusCode))
+		respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes)))
 		return
 	}
 
