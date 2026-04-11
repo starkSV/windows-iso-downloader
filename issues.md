@@ -1,174 +1,148 @@
 # Issue Drafts
 
-## Product detail metadata is missing for several valid product IDs
+## Resolved on `modernize-ui-and-catalog`
 
-### Summary
+### Product detail metadata drift from catalog
 
-Several product IDs exposed in `frontend/public/data/products.json` are not represented in `frontend/src/pages/ProductDetailPage.tsx`.
+Status: resolved on this branch.
 
-As a result, valid product pages render incomplete or incorrect metadata.
+The branch removes the hardcoded `PRODUCT_META` and `RELATED_GROUPS` maps from `frontend/src/pages/ProductDetailPage.tsx` and derives badge, architecture, and related-release data from the structured catalog in `frontend/public/data/products.json`.
 
-### Affected files
+That closes the earlier mismatch where valid IDs such as `3132`, `3133`, `3263`, `3264`, `3266`, and `3267` rendered incomplete metadata.
 
-- `frontend/public/data/products.json`
-- `frontend/src/pages/ProductDetailPage.tsx`
+### Unknown product routes triggering backend requests
 
-### Current behavior
+Status: resolved on this branch.
 
-The catalog currently includes product IDs that are missing from `PRODUCT_META` and/or `RELATED_GROUPS`, including:
+`ProductDetailPage.tsx` now validates `productId` against the local catalog before calling `/skuinfo`. Unknown IDs render a dedicated not-found state instead of immediately hitting the backend and Microsoft endpoints.
 
-- `3132`
-- `3133`
-- `3263`
-- `3264`
-- `3266`
-- `3267`
+### Hardcoded and inconsistent release counts
 
-For those routes, the page falls back to:
+Status: resolved on this branch.
 
-```ts
-{ badge: '', archs: ['x64'] }
-```
+`HomePage.tsx` and `StatsBar.tsx` now derive the release total from `frontend/public/data/products.json` instead of using stale hardcoded values.
 
-This causes visible errors such as:
+### Product detail stale build and metadata after navigation
 
-- ARM64 releases showing `x64`
-- missing release badges
-- missing related-release links
+Status: mostly resolved on this branch.
 
-### Expected behavior
+The route-loading effect now resets `buildStr`, `productName`, related metadata, and validation state before loading the next product. It also sets explicit title and description values for the not-found path.
 
-Every product ID published in `products.json` should have correct display metadata, or the page should derive that metadata from a single shared catalog source.
+Residual concern:
 
-### Suggested fix
+- fetch failures are still surfaced as a not-found style state, which is misleading and is tracked below as a separate issue
 
-- Add missing entries to `PRODUCT_META` and `RELATED_GROUPS`
-- Prefer a single source of truth for product metadata instead of maintaining parallel maps
-- Add a validation step or test that fails when `products.json` contains IDs not covered by the detail-page metadata
+## Open issues
 
-### Prevention
+### Catalog merge script preserves stale products indefinitely
 
-- Maintain one structured product catalog as the canonical source for IDs, badges, architectures, and related releases
-- Derive page metadata from that catalog instead of duplicating product definitions across multiple files
-- Add a CI validation script that fails when a published product ID is missing required UI metadata
+#### Summary
 
-## Product detail page can show stale build and SEO metadata after navigation failures
+`msdls_v3.py` now merges newly discovered products into the existing catalog but never removes IDs that are no longer returned upstream.
 
-### Summary
+#### Affected files
 
-`ProductDetailPage.tsx` does not fully reset state when the route changes, which allows stale product metadata to remain visible after a failed or invalid product lookup.
-
-### Affected file
-
-- `frontend/src/pages/ProductDetailPage.tsx`
-
-### Current behavior
-
-In the product-loading effect:
-
-- `buildStr` is only updated when the fetched product name contains a build number
-- `buildStr` is not cleared before loading a new route
-- the `catch` path only updates `productName`
-
-This means a user can open a valid product page, navigate to an invalid or failed product route, and still see the previous product's build number and document metadata.
-
-### Expected behavior
-
-When the route changes:
-
-- previous build information should be cleared immediately
-- `document.title` and the meta description should always match the current route state
-- failed catalog lookups should not leave inherited metadata on screen
-
-### Suggested fix
-
-- Reset `buildStr` at the start of the effect
-- Update title and meta description in both success and failure paths
-- Consider rendering an explicit not-found state for unknown product IDs instead of falling back to `Product {id}`
-
-### Prevention
-
-- Reset all route-derived state at the start of each product load instead of relying on partial updates
-- Treat SEO fields as part of page state and always update them in both success and failure flows
-- Add a navigation test that moves from a valid product to an invalid one and asserts that stale build and metadata do not persist
-
-## Unknown product routes still trigger backend and Microsoft API requests
-
-### Summary
-
-The frontend accepts any `/product/:productId` route and immediately requests `/skuinfo`, even when the ID is not present in the local catalog.
-
-This causes avoidable backend traffic and unnecessary requests to Microsoft.
-
-### Affected file
-
-- `frontend/src/pages/ProductDetailPage.tsx`
-
-### Current behavior
-
-The page fetches:
-
-```ts
-fetch(`${API_BASE}/skuinfo?product_id=${productId}`)
-```
-
-for any route param, without validating the ID against `frontend/public/data/products.json`.
-
-As a result:
-
-- typos still hit the backend
-- crawler noise still hits Microsoft
-- invalid URLs produce confusing pages like `Product 9999`
-- unnecessary external calls consume rate-limit budget
-
-### Expected behavior
-
-Unknown product IDs should fail fast on the frontend and render a not-found state without calling the backend.
-
-### Suggested fix
-
-- Validate `productId` against the local catalog before requesting `/skuinfo`
-- Render a 404 or invalid-product state for unknown IDs
-- Optionally add backend allowlisting if the supported catalog is intentionally fixed
-
-### Prevention
-
-- Enforce frontend validation for route params before any network call is made
-- Add a test that confirms unknown product IDs do not trigger backend requests
-- Consider backend-side allowlisting or request rejection for unsupported product IDs if the catalog is intentionally fixed
-
-## Release counts are hardcoded in multiple places and already inconsistent
-
-### Summary
-
-The site displays inconsistent release totals because the count is hardcoded in multiple places instead of being derived from the catalog.
-
-### Affected files
-
-- `frontend/src/pages/HomePage.tsx`
-- `frontend/src/components/StatsBar.tsx`
+- `msdls_v3.py`
 - `frontend/public/data/products.json`
 
-### Current behavior
+#### Current behavior
 
-The current values do not match:
+When `--write` is used, the script:
 
-- `HomePage.tsx` shows `Browse all 16 releases`
-- `StatsBar.tsx` shows `17 releases available`
-- `products.json` currently contains `16` entries
+- loads the existing catalog if present
+- updates names for IDs returned in the current scrape
+- preserves all existing entries that were not returned in the current scrape
 
-### Expected behavior
+This means `products.json` can accumulate stale IDs over time.
 
-The release count should be sourced from one canonical dataset and remain consistent across the UI.
+#### Expected behavior
 
-### Suggested fix
+If the catalog is intended to reflect current Microsoft availability, entries not present in the latest scrape should be removed or explicitly marked as retired.
 
-- Derive the release total from `products.json`
-- Pass the computed value into the homepage CTA and stats bar
-- Remove hardcoded catalog totals from UI copy
+#### Risk
 
-### Prevention
+The UI treats catalog entries as valid products. Stale entries can continue to appear in the product list and pass frontend validation, only to fail later when language or download APIs return nothing.
 
-- Derive all release totals and similar summary stats directly from the product catalog
-- Avoid repeating catalog counts in static copy when they can be computed at render time
-- Add a simple assertion in tests or CI that displayed counts match the current catalog size
+#### Suggested fix
+
+- decide whether the catalog is authoritative for current availability or historical availability
+- if it represents current availability, prune IDs not returned in the latest scrape
+- if historical entries must remain, add an explicit status field such as `active: false` and teach the UI how to handle it
+
+#### Prevention
+
+- document the intended lifecycle for catalog entries
+- add a validation step that reports IDs present in the file but absent from the latest scrape
+- avoid silent retention of removed upstream products unless the UI explicitly supports archived entries
+
+### Backend session bootstrap timeout was reduced too aggressively
+
+#### Summary
+
+`backend/main.go` reduces the HTTP client timeout in `setupSession()` from `10 * time.Second` to `3 * time.Second`.
+
+#### Affected file
+
+- `backend/main.go`
+
+#### Current behavior
+
+The session bootstrap performs multiple external Microsoft requests. With the shorter timeout, slower or transient network conditions are more likely to force the code into the “proceed anyway” path.
+
+#### Expected behavior
+
+Session setup should remain tolerant of ordinary network latency and only give up early if there is a clear reliability or UX reason to do so.
+
+#### Risk
+
+This can reduce download-link reliability for users on slower connections or during temporary Microsoft-side latency spikes.
+
+#### Suggested fix
+
+- restore the previous timeout, or choose a value based on observed latency rather than guesswork
+- if faster failure is desired, measure each request separately and log timeout frequency before tightening the limit
+
+#### Prevention
+
+- treat external timeout changes as reliability-sensitive behavior changes
+- record timeout/error rates when tuning values for upstream services
+- add lightweight observability around bootstrap failures before optimizing timeout thresholds
+
+### Catalog fetch failures are shown as “Product Not Found”
+
+#### Summary
+
+`ProductDetailPage.tsx` maps catalog load failures to a not-found style UI, even when the requested `productId` may be valid.
+
+#### Affected file
+
+- `frontend/src/pages/ProductDetailPage.tsx`
+
+#### Current behavior
+
+If fetching or parsing `/data/products.json` fails, the page runs this fallback behavior:
+
+- `setIsNotFound(true)`
+- `setProductName('Error Loading Product')`
+
+The rendered state then tells the user the product does not exist or was removed from the catalog.
+
+#### Expected behavior
+
+Operational failures loading the catalog should render an error state distinct from a true unknown product ID.
+
+#### Risk
+
+Users receive incorrect information, and debugging production issues becomes harder because network or asset problems are disguised as missing products.
+
+#### Suggested fix
+
+- separate “catalog load failed” from “catalog lookup missed”
+- render a retryable error state for fetch/parse failures
+- reserve the not-found state for IDs that were successfully checked against a loaded catalog
+
+#### Prevention
+
+- model route states explicitly: `loading`, `ready`, `not_found`, and `error`
+- add a UI test covering catalog fetch failure and asserting that the page does not present a false 404
+- avoid reusing not-found messaging for transport or asset failures
