@@ -1,110 +1,207 @@
 {
-  "48": {
-    "name": "Windows 8.1 Single Language (9600.17415)",
-    "badge": "LEGACY",
-    "archs": ["x64", "x86"],
-    "related": ["52"]
-  },
-  "52": {
-    "name": "Windows 8.1 (9600.17415)",
-    "badge": "LEGACY",
-    "archs": ["x64", "x86"],
-    "related": ["48", "2618"]
-  },
-  "2378": {
-    "name": "Windows 10 22H2 Home China (19045.2006)",
-    "badge": "EOL SOON",
-    "archs": ["x64"],
-    "related": ["2618"]
-  },
-  "2618": {
-    "name": "Windows 10 22H2 v1 (19045.2965)",
-    "badge": "EOL SOON",
-    "archs": ["x64", "x86"],
-    "related": ["3113", "3262", "52"]
-  },
-  "3113": {
-    "name": "Windows 11 24H2 (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["x64"],
-    "related": ["3262", "3131", "2618"]
-  },
-  "3114": {
-    "name": "Windows 11 24H2 Home China (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["x64"],
-    "related": ["3113", "3115"]
-  },
-  "3115": {
-    "name": "Windows 11 24H2 Pro China (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["x64"],
-    "related": ["3113", "3114"]
-  },
-  "3131": {
-    "name": "Windows 11 Arm64 24H2 (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["ARM64"],
-    "related": ["3265", "3113"]
-  },
-  "3132": {
-    "name": "Windows 11 Arm64 24H2 Home China (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["ARM64"],
-    "related": ["3131", "3133"]
-  },
-  "3133": {
-    "name": "Windows 11 Arm64 24H2 Pro China (26100.1742)",
-    "badge": "STABLE",
-    "archs": ["ARM64"],
-    "related": ["3131", "3132"]
-  },
-  "3262": {
-    "name": "Windows 11 25H2 (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["x64"],
-    "related": ["3265", "3321", "3113"]
-  },
-  "3263": {
-    "name": "Windows 11 25H2 Home China (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["x64"],
-    "related": ["3262", "3264"]
-  },
-  "3264": {
-    "name": "Windows 11 25H2 Pro China (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["x64"],
-    "related": ["3262", "3263"]
-  },
-  "3265": {
-    "name": "Windows 11 Arm64 25H2 (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["ARM64"],
-    "related": ["3262", "3321", "3131"]
-  },
-  "3266": {
-    "name": "Windows 11 Arm64 25H2 Home China (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["ARM64"],
-    "related": ["3265", "3267"]
-  },
-  "3267": {
-    "name": "Windows 11 Arm64 25H2 Pro China (26200.6584)",
-    "badge": "LATEST",
-    "archs": ["ARM64"],
-    "related": ["3265", "3266"]
-  },
-  "3321": {
-    "name": "Windows 11 25H2 (Updated Oct)",
-    "badge": "LATEST",
-    "archs": ["x64"],
-    "related": ["3262", "3324", "3113"]
-  },
-  "3324": {
-    "name": "Windows 11 Arm64 25H2 (Updated Oct)",
-    "badge": "LATEST",
-    "archs": ["ARM64"],
-    "related": ["3321", "3262", "3265"]
-  }
+    "48": {
+        "name": "Windows 8.1 Single Language (9600.17415)",
+        "badge": "LEGACY",
+        "archs": [
+            "x64",
+            "x86"
+        ],
+        "related": [
+            "52"
+        ]
+    },
+    "52": {
+        "name": "Windows 8.1 (9600.17415)",
+        "badge": "LEGACY",
+        "archs": [
+            "x64",
+            "x86"
+        ],
+        "related": [
+            "48",
+            "2618"
+        ]
+    },
+    "2378": {
+        "name": "Windows 10 22H2 Home China (19045.2006)",
+        "badge": "EOL SOON",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "2618"
+        ]
+    },
+    "2618": {
+        "name": "Windows 10 22H2 v1 (19045.2965)",
+        "badge": "EOL SOON",
+        "archs": [
+            "x64",
+            "x86"
+        ],
+        "related": [
+            "3113",
+            "3262",
+            "52"
+        ]
+    },
+    "3113": {
+        "name": "Windows 11 24H2 (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3262",
+            "3131",
+            "2618"
+        ]
+    },
+    "3114": {
+        "name": "Windows 11 24H2 Home China (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3113",
+            "3115"
+        ]
+    },
+    "3115": {
+        "name": "Windows 11 24H2 Pro China (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3113",
+            "3114"
+        ]
+    },
+    "3131": {
+        "name": "Windows 11 Arm64 24H2 (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3265",
+            "3113"
+        ]
+    },
+    "3132": {
+        "name": "Windows 11 Arm64 24H2 Home China (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3131",
+            "3133"
+        ]
+    },
+    "3133": {
+        "name": "Windows 11 Arm64 24H2 Pro China (26100.1742)",
+        "badge": "STABLE",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3131",
+            "3132"
+        ]
+    },
+    "3262": {
+        "name": "Windows 11 25H2 (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3265",
+            "3321",
+            "3113"
+        ]
+    },
+    "3263": {
+        "name": "Windows 11 25H2 Home China (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3262",
+            "3264"
+        ]
+    },
+    "3264": {
+        "name": "Windows 11 25H2 Pro China (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3262",
+            "3263"
+        ]
+    },
+    "3265": {
+        "name": "Windows 11 Arm64 25H2 (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3262",
+            "3321",
+            "3131"
+        ]
+    },
+    "3266": {
+        "name": "Windows 11 Arm64 25H2 Home China (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3265",
+            "3267"
+        ]
+    },
+    "3267": {
+        "name": "Windows 11 Arm64 25H2 Pro China (26200.6584)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3265",
+            "3266"
+        ]
+    },
+    "3321": {
+        "name": "Windows 11 25H2 (Updated Oct)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3262",
+            "3324",
+            "3113"
+        ]
+    },
+    "3324": {
+        "name": "Windows 11 Arm64 25H2 (Updated Oct)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3321",
+            "3262",
+            "3265"
+        ]
+    }
 }

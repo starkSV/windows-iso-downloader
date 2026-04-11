@@ -96,6 +96,7 @@ if __name__ == "__main__":
             # Only log skips for very small ranges to keep output clean
             if (args.last - args.first) < 20:
                 logging.info(f"❌ SKIP:  [{i}] Not found")
+            products[str(i)] = False
         
         # Be gentle to the API
         time.sleep(0.5)
@@ -113,23 +114,41 @@ if __name__ == "__main__":
         # Merge new products, preserving existing extra metadata if present
         for pid, name in products.items():
             if pid in catalog:
+                if name is False:
+                    if isinstance(catalog[pid], dict):
+                        catalog[pid]["active"] = False
+                    else:
+                        catalog[pid] = {
+                            "name": catalog[pid],
+                            "badge": "",
+                            "archs": [],
+                            "related": [],
+                            "active": False
+                        }
+                    continue
+                
                 # Update name but keep other fields like badge, archs, etc.
                 if isinstance(catalog[pid], dict):
                     catalog[pid]["name"] = name
+                    catalog[pid]["active"] = True
                 else:
                     # Upgrade from old flat format
                     catalog[pid] = {
                         "name": name,
                         "badge": "",
                         "archs": [],
-                        "related": []
+                        "related": [],
+                        "active": True
                     }
             else:
+                if name is False:
+                    continue # Do not add new dead entries to the catalog
                 catalog[pid] = {
                     "name": name,
                     "badge": "",
                     "archs": [],
-                    "related": []
+                    "related": [],
+                    "active": True
                 }
                 
         with open(args.write, 'w', encoding='utf-8') as f:

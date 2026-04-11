@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import * as Select from '@radix-ui/react-select'
-import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Sku, DownloadOption } from '../types'
 import SystemRequirements from '../components/SystemRequirements'
@@ -16,6 +16,7 @@ interface ProductCatalogEntry {
   badge: string
   archs: string[]
   related: string[]
+  active?: boolean
 }
 
 function WinLogo({ className }: { className?: string }) {
@@ -54,8 +55,9 @@ export default function ProductDetailPage() {
   const [copiedUri, setCopiedUri] = useState<string | null>(null)
   const [isNotFound, setIsNotFound] = useState(false)
   const [isValidated, setIsValidated] = useState(false)
+  const [hasCatalogError, setHasCatalogError] = useState(false)
   
-  const [meta, setMeta] = useState<{ badge: string; archs: string[] }>({ badge: '', archs: [] })
+  const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: true })
   const [related, setRelated] = useState<{ id: string; label: string }[]>([])
 
   // Load product name + build string
@@ -63,12 +65,16 @@ export default function ProductDetailPage() {
     setBuildStr('')
     setIsNotFound(false)
     setIsValidated(false)
+    setHasCatalogError(false)
     setProductName('')
-    setMeta({ badge: '', archs: [] })
+    setMeta({ badge: '', archs: [], active: true })
     setRelated([])
 
     fetch('/data/products.json')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to fetch catalog')
+        return r.json()
+      })
       .then((data: Record<string, ProductCatalogEntry>) => {
         const product = data[productId!]
         
@@ -83,7 +89,7 @@ export default function ProductDetailPage() {
 
         const name = product.name
         setProductName(name)
-        setMeta({ badge: product.badge || '', archs: product.archs || [] })
+        setMeta({ badge: product.badge || '', archs: product.archs || [], active: product.active !== false })
         
         setRelated((product.related || []).map(rId => ({
           id: rId,
@@ -104,8 +110,8 @@ export default function ProductDetailPage() {
         if (match) setBuildStr(match[1])
       })
       .catch(() => {
-        setIsNotFound(true)
-        setProductName('Error Loading Product')
+        setHasCatalogError(true)
+        setProductName('Error Loading Catalog')
       })
   }, [productId])
 
@@ -211,7 +217,18 @@ export default function ProductDetailPage() {
 
         {/* Main card */}
         <div className="rounded-2xl border border-white/7 bg-[#111113] p-6 space-y-5">
-          {isNotFound ? (
+          {hasCatalogError ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <WifiOff size={32} className="text-zinc-600 mb-4" />
+              <h2 className="text-lg font-semibold text-white mb-2">Network Error</h2>
+              <p className="text-zinc-500 text-sm max-w-xs px-4 leading-relaxed mb-6">
+                Failed to load the product catalog. Please check your internet connection or try refreshing the page.
+              </p>
+              <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-xl bg-white/5 border border-white/8 text-sm font-medium text-white hover:bg-white/10 transition-colors">
+                Retry
+              </button>
+            </div>
+          ) : isNotFound ? (
             <div className="flex flex-col items-center justify-center py-6 text-center">
               <AlertTriangle size={32} className="text-zinc-600 mb-4" />
               <h2 className="text-lg font-semibold text-white mb-2">Product Not Found</h2>
@@ -226,6 +243,17 @@ export default function ProductDetailPage() {
                   Browse all
                 </Link>
               </div>
+            </div>
+          ) : !meta.active ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <AlertTriangle size={32} className="text-amber-500/50 mb-4" />
+              <h2 className="text-lg font-semibold text-white mb-2">Product Discontinued</h2>
+              <p className="text-zinc-500 text-sm max-w-sm px-4 leading-relaxed mb-6">
+                This release is no longer hosted on Microsoft's official CDN and cannot be downloaded.
+              </p>
+              <Link to="/products" className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-sm font-medium text-white hover:bg-white/10 transition-colors">
+                Browse other releases
+              </Link>
             </div>
           ) : isLoadingLangs ? (
             <div className="space-y-4">
@@ -403,13 +431,13 @@ export default function ProductDetailPage() {
           </AnimatePresence>
         </div>
 
-        {!isNotFound && (
+        {(!isNotFound && !hasCatalogError) && (
           <>
             {/* System requirements */}
             <SystemRequirements isWin11={isWin11(productId!)} />
 
             {/* aria2 tip */}
-            <Aria2Tip downloadUrl={firstUri} />
+            {meta.active && <Aria2Tip downloadUrl={firstUri} />}
 
             {/* Related releases */}
             {related.length > 0 && (

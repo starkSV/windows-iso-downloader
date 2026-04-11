@@ -69,7 +69,10 @@ export default function HomePage() {
     
     fetch('/data/products.json')
       .then(r => r.json())
-      .then(data => setTotalReleases(Object.keys(data).length))
+      .then((data: Record<string, { active?: boolean }>) => {
+        const activeCount = Object.values(data).filter(p => p.active !== false).length
+        setTotalReleases(activeCount)
+      })
       .catch(() => {})
   }, [])
 

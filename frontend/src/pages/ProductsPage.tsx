@@ -22,8 +22,11 @@ export default function ProductsPage() {
     
     fetch('/data/products.json')
       .then(r => r.json())
-      .then((data: Record<string, { name: string }>) => {
-        setProducts(Object.entries(data).map(([id, product]) => ({ id, name: product.name })))
+      .then((data: Record<string, { name: string; active?: boolean }>) => {
+        const activeProducts = Object.entries(data)
+          .filter(([_, product]) => product.active !== false)
+          .map(([id, product]) => ({ id, name: product.name }))
+        setProducts(activeProducts)
       })
       .finally(() => setIsLoading(false))
   }, [])

@@ -12,7 +12,10 @@ export default function StatsBar() {
   useEffect(() => {
     fetch('/data/products.json')
       .then(r => r.json())
-      .then(data => setTotalReleases(Object.keys(data).length.toString()))
+      .then((data: Record<string, { active?: boolean }>) => {
+        const activeCount = Object.values(data).filter(p => p.active !== false).length
+        setTotalReleases(activeCount.toString())
+      })
       .catch(() => {})
   }, [])
 
