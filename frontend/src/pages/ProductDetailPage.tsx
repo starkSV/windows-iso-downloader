@@ -117,7 +117,7 @@ export default function ProductDetailPage() {
 
   // Fetch languages on mount
   useEffect(() => {
-    if (!productId || !isValidated) return
+    if (!productId || !isValidated || !meta.active) return
     setIsLoadingLangs(true)
     setError(null)
     setDownloadLinks([])
@@ -138,7 +138,7 @@ export default function ProductDetailPage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setIsLoadingLangs(false))
-  }, [productId, isValidated])
+  }, [productId, isValidated, meta.active])
 
   async function handleGetLinks() {
     if (!selectedSku || !productId) return
