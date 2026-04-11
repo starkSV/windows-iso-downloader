@@ -32,48 +32,15 @@ Residual concern:
 
 - fetch failures are still surfaced as a not-found style state, which is misleading and is tracked below as a separate issue
 
+### Catalog merge behavior in `msdls_v3.py`
+
+Status: not treated as a defect.
+
+`msdls_v3.py` is used manually for periodic catalog maintenance, and `frontend/public/data/products.json` is curated rather than treated as a strict mirror of current upstream availability.
+
+Because of that, preserving existing entries and metadata during a write is acceptable behavior for this workflow.
+
 ## Open issues
-
-### Catalog merge script preserves stale products indefinitely
-
-#### Summary
-
-`msdls_v3.py` now merges newly discovered products into the existing catalog but never removes IDs that are no longer returned upstream.
-
-#### Affected files
-
-- `msdls_v3.py`
-- `frontend/public/data/products.json`
-
-#### Current behavior
-
-When `--write` is used, the script:
-
-- loads the existing catalog if present
-- updates names for IDs returned in the current scrape
-- preserves all existing entries that were not returned in the current scrape
-
-This means `products.json` can accumulate stale IDs over time.
-
-#### Expected behavior
-
-If the catalog is intended to reflect current Microsoft availability, entries not present in the latest scrape should be removed or explicitly marked as retired.
-
-#### Risk
-
-The UI treats catalog entries as valid products. Stale entries can continue to appear in the product list and pass frontend validation, only to fail later when language or download APIs return nothing.
-
-#### Suggested fix
-
-- decide whether the catalog is authoritative for current availability or historical availability
-- if it represents current availability, prune IDs not returned in the latest scrape
-- if historical entries must remain, add an explicit status field such as `active: false` and teach the UI how to handle it
-
-#### Prevention
-
-- document the intended lifecycle for catalog entries
-- add a validation step that reports IDs present in the file but absent from the latest scrape
-- avoid silent retention of removed upstream products unless the UI explicitly supports archived entries
 
 ### Backend session bootstrap timeout was reduced too aggressively
 
