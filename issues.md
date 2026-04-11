@@ -46,6 +46,12 @@ Every product ID published in `products.json` should have correct display metada
 - Prefer a single source of truth for product metadata instead of maintaining parallel maps
 - Add a validation step or test that fails when `products.json` contains IDs not covered by the detail-page metadata
 
+### Prevention
+
+- Maintain one structured product catalog as the canonical source for IDs, badges, architectures, and related releases
+- Derive page metadata from that catalog instead of duplicating product definitions across multiple files
+- Add a CI validation script that fails when a published product ID is missing required UI metadata
+
 ## Product detail page can show stale build and SEO metadata after navigation failures
 
 ### Summary
@@ -79,6 +85,12 @@ When the route changes:
 - Reset `buildStr` at the start of the effect
 - Update title and meta description in both success and failure paths
 - Consider rendering an explicit not-found state for unknown product IDs instead of falling back to `Product {id}`
+
+### Prevention
+
+- Reset all route-derived state at the start of each product load instead of relying on partial updates
+- Treat SEO fields as part of page state and always update them in both success and failure flows
+- Add a navigation test that moves from a valid product to an invalid one and asserts that stale build and metadata do not persist
 
 ## Unknown product routes still trigger backend and Microsoft API requests
 
@@ -119,6 +131,12 @@ Unknown product IDs should fail fast on the frontend and render a not-found stat
 - Render a 404 or invalid-product state for unknown IDs
 - Optionally add backend allowlisting if the supported catalog is intentionally fixed
 
+### Prevention
+
+- Enforce frontend validation for route params before any network call is made
+- Add a test that confirms unknown product IDs do not trigger backend requests
+- Consider backend-side allowlisting or request rejection for unsupported product IDs if the catalog is intentionally fixed
+
 ## Release counts are hardcoded in multiple places and already inconsistent
 
 ### Summary
@@ -148,3 +166,9 @@ The release count should be sourced from one canonical dataset and remain consis
 - Derive the release total from `products.json`
 - Pass the computed value into the homepage CTA and stats bar
 - Remove hardcoded catalog totals from UI copy
+
+### Prevention
+
+- Derive all release totals and similar summary stats directly from the product catalog
+- Avoid repeating catalog counts in static copy when they can be computed at render time
+- Add a simple assertion in tests or CI that displayed counts match the current catalog size
