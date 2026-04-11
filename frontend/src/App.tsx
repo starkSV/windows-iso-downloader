@@ -12,9 +12,9 @@ import ScrollToTop from './components/ScrollToTop'
 
 export default function App() {
   return (
-    <div className="min-h-screen pb-20 sm:pb-24" style={{ overflowX: 'hidden', maxWidth: '100vw' }}>
+    <div className="min-h-screen pb-20 sm:pb-24 flex flex-col" style={{ overflowX: 'hidden', maxWidth: '100vw' }}>
       <ScrollToTop />
-      <main>
+      <main className="flex-1">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />

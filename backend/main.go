@@ -53,7 +53,7 @@ func getReferer(productId string) string {
 // Replicate Fido session tracking
 func setupSession() (string, error) {
 	sessionID := uuid.New().String()
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Second}
 
 	// Step 1: Register session
 	req1, _ := http.NewRequest("GET", fmt.Sprintf("https://vlscppe.microsoft.com/tags?org_id=%s&session_id=%s", ORG_ID, sessionID), nil)

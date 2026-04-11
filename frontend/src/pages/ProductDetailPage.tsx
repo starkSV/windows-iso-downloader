@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import * as Select from '@radix-ui/react-select'
 import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink } from 'lucide-react'
@@ -11,61 +11,11 @@ import RelatedReleases from '../components/RelatedReleases'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
 
-// Map product ID → metadata
-const PRODUCT_META: Record<string, { badge: string; archs: string[] }> = {
-  '3262': { badge: 'LATEST', archs: ['x64'] },
-  '3265': { badge: 'LATEST', archs: ['ARM64'] },
-  '3321': { badge: 'LATEST', archs: ['x64'] },
-  '3324': { badge: 'LATEST', archs: ['ARM64'] },
-  '3113': { badge: 'STABLE', archs: ['x64'] },
-  '3131': { badge: 'STABLE', archs: ['ARM64'] },
-  '2618': { badge: 'EOL SOON', archs: ['x64', 'x86'] },
-  '2378': { badge: 'EOL SOON', archs: ['x64'] },
-  '52': { badge: 'LEGACY', archs: ['x64', 'x86'] },
-  '48': { badge: 'LEGACY', archs: ['x64', 'x86'] },
-}
-
-// Sibling release groups for "Also available"
-const RELATED_GROUPS: Record<string, { id: string; label: string }[]> = {
-  '3262': [
-    { id: '3265', label: 'Win 11 25H2 ARM64' },
-    { id: '3321', label: 'Win 11 25H2 (updated)' },
-    { id: '3113', label: 'Win 11 24H2' },
-  ],
-  '3265': [
-    { id: '3262', label: 'Win 11 25H2 x64' },
-    { id: '3321', label: 'Win 11 25H2 (updated)' },
-    { id: '3131', label: 'Win 11 24H2 ARM64' },
-  ],
-  '3321': [
-    { id: '3262', label: 'Win 11 25H2' },
-    { id: '3324', label: 'Win 11 25H2 ARM64' },
-    { id: '3113', label: 'Win 11 24H2' },
-  ],
-  '3324': [
-    { id: '3321', label: 'Win 11 25H2 x64' },
-    { id: '3262', label: 'Win 11 25H2' },
-    { id: '3265', label: 'Win 11 25H2 ARM64 (alt)' },
-  ],
-  '3113': [
-    { id: '3262', label: 'Win 11 25H2' },
-    { id: '3131', label: 'Win 11 24H2 ARM64' },
-    { id: '2618', label: 'Win 10 22H2' },
-  ],
-  '3131': [
-    { id: '3265', label: 'Win 11 25H2 ARM64' },
-    { id: '3113', label: 'Win 11 24H2 x64' },
-  ],
-  '2618': [
-    { id: '3113', label: 'Win 11 24H2' },
-    { id: '3262', label: 'Win 11 25H2' },
-    { id: '52', label: 'Win 8.1' },
-  ],
-
-  '52': [
-    { id: '48', label: 'Win 8.1 Single Language' },
-    { id: '2618', label: 'Win 10 22H2' },
-  ],
+interface ProductCatalogEntry {
+  name: string
+  badge: string
+  archs: string[]
+  related: string[]
 }
 
 function WinLogo({ className }: { className?: string }) {
@@ -102,17 +52,45 @@ export default function ProductDetailPage() {
   const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copiedUri, setCopiedUri] = useState<string | null>(null)
-
-  const meta = PRODUCT_META[productId!] ?? { badge: '', archs: ['x64'] }
-  const related = RELATED_GROUPS[productId!] ?? []
+  const [isNotFound, setIsNotFound] = useState(false)
+  const [isValidated, setIsValidated] = useState(false)
+  
+  const [meta, setMeta] = useState<{ badge: string; archs: string[] }>({ badge: '', archs: [] })
+  const [related, setRelated] = useState<{ id: string; label: string }[]>([])
 
   // Load product name + build string
   useEffect(() => {
+    setBuildStr('')
+    setIsNotFound(false)
+    setIsValidated(false)
+    setProductName('')
+    setMeta({ badge: '', archs: [] })
+    setRelated([])
+
     fetch('/data/products.json')
       .then(r => r.json())
-      .then((data: Record<string, string>) => {
-        const name = data[productId!] ?? `Product ${productId}`
+      .then((data: Record<string, ProductCatalogEntry>) => {
+        const product = data[productId!]
+        
+        if (!product || !product.name) {
+          setIsNotFound(true)
+          setProductName('Product Not Found')
+          document.title = 'Product Not Found | Windows ISO Downloader'
+          const descMeta = document.querySelector('meta[name="description"]')
+          if (descMeta) descMeta.setAttribute('content', 'The requested product could not be found.')
+          return
+        }
+
+        const name = product.name
         setProductName(name)
+        setMeta({ badge: product.badge || '', archs: product.archs || [] })
+        
+        setRelated((product.related || []).map(rId => ({
+          id: rId,
+          label: data[rId]?.name || `Product ${rId}`
+        })))
+        
+        setIsValidated(true)
         
         // Dynamic SEO injection
         document.title = `${name} ISO Download | Windows ISO Downloader`
@@ -125,12 +103,15 @@ export default function ProductDetailPage() {
         const match = name.match(/\(([^)]+)\)/)
         if (match) setBuildStr(match[1])
       })
-      .catch(() => setProductName(`Product ${productId}`))
+      .catch(() => {
+        setIsNotFound(true)
+        setProductName('Error Loading Product')
+      })
   }, [productId])
 
   // Fetch languages on mount
   useEffect(() => {
-    if (!productId) return
+    if (!productId || !isValidated) return
     setIsLoadingLangs(true)
     setError(null)
     setDownloadLinks([])
@@ -151,7 +132,7 @@ export default function ProductDetailPage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setIsLoadingLangs(false))
-  }, [productId])
+  }, [productId, isValidated])
 
   async function handleGetLinks() {
     if (!selectedSku || !productId) return
@@ -230,11 +211,37 @@ export default function ProductDetailPage() {
 
         {/* Main card */}
         <div className="rounded-2xl border border-white/7 bg-[#111113] p-6 space-y-5">
-          {isLoadingLangs ? (
-            <div className="space-y-3">
-              <div className="h-3 w-20 bg-white/6 rounded animate-pulse" />
-              <div className="h-11 bg-white/6 rounded-xl animate-pulse" />
-              <div className="h-11 bg-white/5 rounded-xl animate-pulse" />
+          {isNotFound ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <AlertTriangle size={32} className="text-zinc-600 mb-4" />
+              <h2 className="text-lg font-semibold text-white mb-2">Product Not Found</h2>
+              <p className="text-zinc-500 text-sm max-w-xs px-4 leading-relaxed mb-6">
+                The product ID you requested ({productId}) does not exist or has been removed from the catalog.
+              </p>
+              <div className="flex items-center justify-center gap-3 w-full">
+                <Link to="/" className="flex-1 max-w-[140px] px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-sm font-medium text-white hover:bg-white/10 transition-colors">
+                  Home
+                </Link>
+                <Link to="/products" className="flex-1 max-w-[140px] px-4 py-2.5 rounded-xl bg-blue-500 text-sm font-medium text-white hover:bg-blue-600 transition-colors shadow-lg">
+                  Browse all
+                </Link>
+              </div>
+            </div>
+          ) : isLoadingLangs ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2.5 text-xs text-zinc-400 font-medium tracking-wide">
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="inline-block w-4 h-4 border-2 border-zinc-500/30 border-t-zinc-500 rounded-full"
+                />
+                Connecting to Microsoft CDN...
+              </div>
+              <div className="space-y-3">
+                <div className="h-3 w-20 bg-white/6 rounded animate-pulse" />
+                <div className="h-11 bg-white/6 rounded-xl animate-pulse" />
+                <div className="h-11 bg-white/5 rounded-xl animate-pulse" />
+              </div>
             </div>
           ) : error && !languages.length ? (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/8 border border-red-500/15 text-red-400 text-sm">
@@ -396,15 +403,19 @@ export default function ProductDetailPage() {
           </AnimatePresence>
         </div>
 
-        {/* System requirements */}
-        <SystemRequirements isWin11={isWin11(productId!)} />
+        {!isNotFound && (
+          <>
+            {/* System requirements */}
+            <SystemRequirements isWin11={isWin11(productId!)} />
 
-        {/* aria2 tip */}
-        <Aria2Tip downloadUrl={firstUri} />
+            {/* aria2 tip */}
+            <Aria2Tip downloadUrl={firstUri} />
 
-        {/* Related releases */}
-        {related.length > 0 && (
-          <RelatedReleases current={productId!} items={related} />
+            {/* Related releases */}
+            {related.length > 0 && (
+              <RelatedReleases current={productId!} items={related} />
+            )}
+          </>
         )}
       </motion.div>
     </div>

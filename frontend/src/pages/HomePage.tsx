@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ArrowRight } from 'lucide-react'
@@ -58,6 +58,7 @@ const cardVariant = {
 }
 
 export default function HomePage() {
+  const [totalReleases, setTotalReleases] = useState(16)
 
   useEffect(() => {
     document.title = "Windows ISO Downloader | Official Microsoft Images"
@@ -65,6 +66,11 @@ export default function HomePage() {
     if (metaDesc) {
       metaDesc.setAttribute('content', "Download official Microsoft Windows ISO files. Fast, free, no registration required.")
     }
+    
+    fetch('/data/products.json')
+      .then(r => r.json())
+      .then(data => setTotalReleases(Object.keys(data).length))
+      .catch(() => {})
   }, [])
 
   return (
@@ -147,7 +153,7 @@ export default function HomePage() {
           to="/products"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/8 bg-white/4 text-sm text-zinc-400 hover:text-white hover:border-white/15 hover:bg-white/7 transition-all duration-200"
         >
-          Browse all {featured.length > 0 ? '16' : ''} releases
+          Browse all {totalReleases} releases
           <ArrowRight size={14} />
         </Link>
       </motion.div>

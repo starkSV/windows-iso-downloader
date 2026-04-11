@@ -1,17 +1,27 @@
 import { motion } from 'motion/react'
+import { useState, useEffect } from 'react'
 
 interface Stat {
   value: string
   label: string
 }
 
-const stats: Stat[] = [
-  { value: '17', label: 'releases available' },
-  { value: '38', label: 'languages' },
-  { value: '0', label: 'intermediaries' },
-]
-
 export default function StatsBar() {
+  const [totalReleases, setTotalReleases] = useState('17')
+
+  useEffect(() => {
+    fetch('/data/products.json')
+      .then(r => r.json())
+      .then(data => setTotalReleases(Object.keys(data).length.toString()))
+      .catch(() => {})
+  }, [])
+
+  const stats: Stat[] = [
+    { value: totalReleases, label: 'releases available' },
+    { value: '38', label: 'languages' },
+    { value: '0', label: 'intermediaries' },
+  ]
+
   return (
     <motion.div
       className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] font-mono text-zinc-600"

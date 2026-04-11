@@ -22,8 +22,8 @@ export default function ProductsPage() {
     
     fetch('/data/products.json')
       .then(r => r.json())
-      .then((data: Record<string, string>) => {
-        setProducts(Object.entries(data).map(([id, name]) => ({ id, name })))
+      .then((data: Record<string, { name: string }>) => {
+        setProducts(Object.entries(data).map(([id, product]) => ({ id, name: product.name })))
       })
       .finally(() => setIsLoading(false))
   }, [])

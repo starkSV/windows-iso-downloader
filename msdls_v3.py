@@ -101,8 +101,39 @@ if __name__ == "__main__":
         time.sleep(0.5)
 
     if args.write:
+        import os
+        catalog = {}
+        if os.path.exists(args.write):
+            try:
+                with open(args.write, 'r', encoding='utf-8') as f:
+                    catalog = json.load(f)
+            except Exception as e:
+                logging.error(f"Failed to read existing catalog: {e}")
+        
+        # Merge new products, preserving existing extra metadata if present
+        for pid, name in products.items():
+            if pid in catalog:
+                # Update name but keep other fields like badge, archs, etc.
+                if isinstance(catalog[pid], dict):
+                    catalog[pid]["name"] = name
+                else:
+                    # Upgrade from old flat format
+                    catalog[pid] = {
+                        "name": name,
+                        "badge": "",
+                        "archs": [],
+                        "related": []
+                    }
+            else:
+                catalog[pid] = {
+                    "name": name,
+                    "badge": "",
+                    "archs": [],
+                    "related": []
+                }
+                
         with open(args.write, 'w', encoding='utf-8') as f:
-            json.dump(products, f, indent=4)
-            logging.info(f"\nSaved {len(products)} products to {args.write}")
+            json.dump(catalog, f, indent=4)
+            logging.info(f"\nSaved {len(catalog)} products to {args.write} (merged with existing)")
     
     logging.info("Done.")
