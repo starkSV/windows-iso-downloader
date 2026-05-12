@@ -21,9 +21,15 @@ MSDL replicates the session flow that Microsoft uses to serve ISO download links
 
 ---
 
-## Screenshot
+## Screenshots
 
-> _Coming soon_
+| Home | All Releases |
+|---|---|
+| ![Home page showing featured Windows releases](frontend/public/screenshots/msdl-1.jpg) | ![Products listing page with search](frontend/public/screenshots/msdl-2.jpg) |
+
+| Product detail — language selector | Product detail — download links |
+|---|---|
+| ![Product detail page with language dropdown](frontend/public/screenshots/msdl-3.jpg) | ![Download links with expiry warning](frontend/public/screenshots/msdl-4.jpg) |
 
 ---
 

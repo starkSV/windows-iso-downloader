@@ -1,4 +1,4 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import Dock from './components/Dock'
 import SiteFooter from './components/SiteFooter'
@@ -8,6 +8,7 @@ import ProductDetailPage from './pages/ProductDetailPage'
 import AboutPage from './pages/AboutPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import DisclaimerPage from './pages/DisclaimerPage'
+import NotFoundPage from './pages/NotFoundPage'
 import ScrollToTop from './components/ScrollToTop'
 
 export default function App() {
@@ -22,15 +23,7 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/disclaimer" element={<DisclaimerPage />} />
-          <Route path="*" element={
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <h1 className="text-6xl font-bold text-white mb-4">404</h1>
-              <p className="text-zinc-400 mb-8">The page you're looking for doesn't exist.</p>
-              <Link to="/" className="px-6 py-2 bg-white text-black font-semibold rounded-full hover:bg-zinc-200 transition-colors">
-                Go Home
-              </Link>
-            </div>
-          } />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
       <SiteFooter />
