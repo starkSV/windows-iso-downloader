@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"sync"
@@ -56,12 +57,19 @@ func setupSession() (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	// Step 1: Register session
-	req1, _ := http.NewRequest("GET", fmt.Sprintf("https://vlscppe.microsoft.com/tags?org_id=%s&session_id=%s", ORG_ID, sessionID), nil)
+	q1 := url.Values{}
+	q1.Set("org_id", ORG_ID)
+	q1.Set("session_id", sessionID)
+	req1, _ := http.NewRequest("GET", "https://vlscppe.microsoft.com/tags?"+q1.Encode(), nil)
 	req1.Header.Set("User-Agent", UA)
 	client.Do(req1) // Ignore errors intentionally
 
 	// Step 2: Fetch tracking JS
-	req2, _ := http.NewRequest("GET", fmt.Sprintf("https://ov-df.microsoft.com/mdt.js?instanceId=%s&PageId=si&session_id=%s", CUSTOMER_ID, sessionID), nil)
+	q2 := url.Values{}
+	q2.Set("instanceId", CUSTOMER_ID)
+	q2.Set("PageId", "si")
+	q2.Set("session_id", sessionID)
+	req2, _ := http.NewRequest("GET", "https://ov-df.microsoft.com/mdt.js?"+q2.Encode(), nil)
 	req2.Header.Set("User-Agent", UA)
 	resp2, err := client.Do(req2)
 	if err != nil {
@@ -85,8 +93,14 @@ func setupSession() (string, error) {
 		rtVal := rtMatch[1]
 		mdt := time.Now().UnixMilli()
 
-		fpURL := fmt.Sprintf("https://ov-df.microsoft.com/?session_id=%s&CustomerId=%s&PageId=si&w=%s&mdt=%d&rticks=%s",
-			sessionID, CUSTOMER_ID, wVal, mdt, rtVal)
+		q3 := url.Values{}
+		q3.Set("session_id", sessionID)
+		q3.Set("CustomerId", CUSTOMER_ID)
+		q3.Set("PageId", "si")
+		q3.Set("w", wVal)
+		q3.Set("mdt", fmt.Sprintf("%d", mdt))
+		q3.Set("rticks", rtVal)
+		fpURL := "https://ov-df.microsoft.com/?" + q3.Encode()
 
 		req3, _ := http.NewRequest("GET", fpURL, nil)
 		req3.Header.Set("User-Agent", UA)
@@ -158,6 +172,10 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		respondJSONError(w, http.StatusBadRequest, "product_id query parameter is required")
 		return
 	}
+	if _, err := strconv.Atoi(productID); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
+		return
+	}
 
 	sessionID, _ := setupSession()
 
@@ -165,8 +183,14 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 	sessionCache[productID] = SessionEntry{SessionID: sessionID, CreatedAt: time.Now()}
 	cacheMutex.Unlock()
 
-	reqURL := fmt.Sprintf("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?profile=%s&productEditionId=%s&SKU=undefined&friendlyFileName=undefined&Locale=%s&sessionID=%s",
-		PROFILE, productID, LOCALE, sessionID)
+	skuQ := url.Values{}
+	skuQ.Set("profile", PROFILE)
+	skuQ.Set("productEditionId", productID)
+	skuQ.Set("SKU", "undefined")
+	skuQ.Set("friendlyFileName", "undefined")
+	skuQ.Set("Locale", LOCALE)
+	skuQ.Set("sessionID", sessionID)
+	reqURL := "https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + skuQ.Encode()
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	var finalData map[string]interface{}
@@ -250,6 +274,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		respondJSONError(w, http.StatusBadRequest, "product_id and sku_id query parameters are required")
 		return
 	}
+	if _, err := strconv.Atoi(productID); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
+		return
+	}
+	if _, err := strconv.Atoi(skuID); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "sku_id must be a numeric value")
+		return
+	}
 
 	var sessionID string
 	cacheMutex.RLock()
@@ -264,8 +296,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		sessionID, _ = setupSession()
 
 		// Warmup with SKU info request
-		warmupURL := fmt.Sprintf("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?profile=%s&productEditionId=%s&SKU=undefined&friendlyFileName=undefined&Locale=%s&sessionID=%s",
-			PROFILE, productID, LOCALE, sessionID)
+		warmupQ := url.Values{}
+		warmupQ.Set("profile", PROFILE)
+		warmupQ.Set("productEditionId", productID)
+		warmupQ.Set("SKU", "undefined")
+		warmupQ.Set("friendlyFileName", "undefined")
+		warmupQ.Set("Locale", LOCALE)
+		warmupQ.Set("sessionID", sessionID)
+		warmupURL := "https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + warmupQ.Encode()
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequest("GET", warmupURL, nil)
@@ -279,8 +317,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		cacheMutex.Unlock()
 	}
 
-	reqURL := fmt.Sprintf("https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?profile=%s&productEditionId=undefined&SKU=%s&friendlyFileName=undefined&Locale=%s&sessionID=%s",
-		PROFILE, skuID, LOCALE, sessionID)
+	proxyQ := url.Values{}
+	proxyQ.Set("profile", PROFILE)
+	proxyQ.Set("productEditionId", "undefined")
+	proxyQ.Set("SKU", skuID)
+	proxyQ.Set("friendlyFileName", "undefined")
+	proxyQ.Set("Locale", LOCALE)
+	proxyQ.Set("sessionID", sessionID)
+	reqURL := "https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?" + proxyQ.Encode()
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, _ := http.NewRequest("GET", reqURL, nil)
@@ -354,7 +398,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Write pure JSON
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // Don't encode & to \u0026 in URLs!
+	enc.SetEscapeHTML(false) // Don't encode & to & in URLs!
 	enc.Encode(data)
 	w.Write(buf.Bytes())
 }
