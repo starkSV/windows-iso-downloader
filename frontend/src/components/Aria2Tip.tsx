@@ -12,7 +12,7 @@ export default function Aria2Tip({ downloadUrl }: Aria2TipProps) {
   const [copied, setCopied] = useState(false)
 
   const urlPlaceholder = downloadUrl || 'PASTE_YOUR_LINK_HERE'
-  const command = `aria2c -x 16 -s 16 "${urlPlaceholder}"`
+  const command = `aria2c -x 16 -s 16 --disable-ipv6=true "${urlPlaceholder}"`
 
   function handleCopy() {
     navigator.clipboard.writeText(command)
