@@ -22,7 +22,7 @@ const faqs: FaqItem[] = [
   },
   {
     q: 'Can I use this with IDM or aria2?',
-    a: 'Absolutely — and we strongly recommend it. Microsoft throttles single-threaded browser downloads. Tools like aria2 (aria2c -x 16 -s 16 "URL") or IDM use 16 parallel connections, which typically give you full line speed on their CDN.',
+    a: 'Absolutely — and we strongly recommend it. Microsoft throttles single-threaded browser downloads. Tools like aria2 (aria2c -x 16 -s 16 --disable-ipv6=true "URL") or IDM use 16 parallel connections, which typically give you full line speed on their CDN.',
   },
   {
     q: 'What\'s the difference between the various product IDs?',
