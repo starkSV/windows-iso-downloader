@@ -24,7 +24,7 @@ export default function ProductsPage() {
       .then(r => r.json())
       .then((data: Record<string, { name: string; active?: boolean }>) => {
         const activeProducts = Object.entries(data)
-          .filter(([_, product]) => product.active !== false)
+          .filter(([, product]) => product.active !== false)
           .map(([id, product]) => ({ id, name: product.name }))
         setProducts(activeProducts)
       })

@@ -57,7 +57,7 @@ export default function ProductDetailPage() {
   const [isValidated, setIsValidated] = useState(false)
   const [hasCatalogError, setHasCatalogError] = useState(false)
   
-  const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: true })
+  const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: false })
   const [related, setRelated] = useState<{ id: string; label: string }[]>([])
 
   // Load product name + build string
@@ -67,8 +67,14 @@ export default function ProductDetailPage() {
     setIsValidated(false)
     setHasCatalogError(false)
     setProductName('')
-    setMeta({ badge: '', archs: [], active: true })
+    setMeta({ badge: '', archs: [], active: false })
     setRelated([])
+
+    if (productId && !/^\d+$/.test(productId)) {
+      setIsNotFound(true)
+      setProductName('Invalid Product ID')
+      return
+    }
 
     fetch('/data/products.json')
       .then(r => {
@@ -89,14 +95,17 @@ export default function ProductDetailPage() {
 
         const name = product.name
         setProductName(name)
-        setMeta({ badge: product.badge || '', archs: product.archs || [], active: product.active !== false })
+        const isActive = product.active !== false
+        setMeta({ badge: product.badge || '', archs: product.archs || [], active: isActive })
         
         setRelated((product.related || []).map(rId => ({
           id: rId,
           label: data[rId]?.name || `Product ${rId}`
         })))
         
-        setIsValidated(true)
+        if (isActive) {
+          setIsValidated(true)
+        }
         
         // Dynamic SEO injection
         document.title = `${name} ISO Download | Windows ISO Downloader`
@@ -217,7 +226,23 @@ export default function ProductDetailPage() {
 
         {/* Main card */}
         <div className="rounded-2xl border border-white/7 bg-[#111113] p-6 space-y-5">
-          {hasCatalogError ? (
+          {!productName && !isNotFound && !hasCatalogError ? (
+             <div className="space-y-4">
+               <div className="flex items-center gap-2.5 text-xs text-zinc-400 font-medium tracking-wide">
+                 <motion.span
+                   animate={{ rotate: 360 }}
+                   transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                   className="inline-block w-4 h-4 border-2 border-zinc-500/30 border-t-zinc-500 rounded-full"
+                 />
+                 Loading catalog...
+               </div>
+               <div className="space-y-3">
+                 <div className="h-3 w-20 bg-white/6 rounded animate-pulse" />
+                 <div className="h-11 bg-white/6 rounded-xl animate-pulse" />
+                 <div className="h-11 bg-white/5 rounded-xl animate-pulse" />
+               </div>
+             </div>
+          ) : hasCatalogError ? (
             <div className="flex flex-col items-center justify-center py-6 text-center">
               <WifiOff size={32} className="text-zinc-600 mb-4" />
               <h2 className="text-lg font-semibold text-white mb-2">Network Error</h2>
