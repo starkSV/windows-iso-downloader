@@ -829,16 +829,21 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(&mLinkStale, 1)
 			log.Printf("/proxy: product_id=%s sku_id=%s -> fetch failed (%v), serving stale\n", productID, skuID, err)
 			go func() {
-				raw, bgErr := fetchDownloadLinksFromMS(productID, skuID)
-				if bgErr != nil {
-					log.Printf("/proxy: background refresh failed for %s:%s: %v\n", productID, skuID, bgErr)
-					return
-				}
-				exp := parseLinkExpiry(raw)
-				linkCacheMu.Lock()
-				linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: exp, FetchedAt: time.Now()}
-				linkCacheMu.Unlock()
-				log.Printf("/proxy: background refresh succeeded for %s:%s, cached until %s\n", productID, skuID, exp.Format(time.RFC3339))
+				// Use singleflight so concurrent stale serves don't all hit Microsoft
+				sfBgKey := "link:" + cacheKey
+				sfGroup.Do(sfBgKey, func() (interface{}, error) {
+					raw, bgErr := fetchDownloadLinksFromMS(productID, skuID)
+					if bgErr != nil {
+						log.Printf("/proxy: background refresh failed for %s:%s: %v\n", productID, skuID, bgErr)
+						return nil, bgErr
+					}
+					exp := parseLinkExpiry(raw)
+					linkCacheMu.Lock()
+					linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: exp, FetchedAt: time.Now()}
+					linkCacheMu.Unlock()
+					log.Printf("/proxy: background refresh succeeded for %s:%s, cached until %s\n", productID, skuID, exp.Format(time.RFC3339))
+					return nil, nil
+				})
 			}()
 			w.Write(cached.RawJSON)
 			return
@@ -943,11 +948,13 @@ func cleanupCaches() {
 	ticker := time.NewTicker(30 * time.Minute)
 	for range ticker.C {
 		now := time.Now()
+		var skuDel, linkDel, negDel int
 
 		skuCacheMu.Lock()
 		for k, v := range skuCache {
 			if now.After(v.ExpiresAt) {
 				delete(skuCache, k)
+				skuDel++
 			}
 		}
 		skuCacheMu.Unlock()
@@ -957,6 +964,7 @@ func cleanupCaches() {
 		for k, v := range linkCache {
 			if now.After(v.ExpiresAt.Add(4 * time.Hour)) {
 				delete(linkCache, k)
+				linkDel++
 			}
 		}
 		linkCacheMu.Unlock()
@@ -965,11 +973,14 @@ func cleanupCaches() {
 		for k, v := range negCache {
 			if now.After(v.ExpiresAt) {
 				delete(negCache, k)
+				negDel++
 			}
 		}
 		negCacheMu.Unlock()
 
-		log.Printf("cache cleanup: sku=%d link=%d neg=%d\n", len(skuCache), len(linkCache), len(negCache))
+		if skuDel+linkDel+negDel > 0 {
+			log.Printf("cache cleanup: evicted sku=%d link=%d neg=%d\n", skuDel, linkDel, negDel)
+		}
 	}
 }
 
