@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -26,8 +28,10 @@ const (
 	LOCALE      = "en-US"
 	ORG_ID      = "y6jn8c31"
 	CUSTOMER_ID = "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
-	PORT        = ":3002" // Different port to run alongside Node
+	PORT        = ":3002"
 )
+
+// --- Session cache (short-lived, used to chain /skuinfo → /proxy) ---
 
 type SessionEntry struct {
 	SessionID string
@@ -41,6 +45,50 @@ var (
 	workerSecret = os.Getenv("CF_WORKER_SECRET")
 	validSkuID   = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 )
+
+// --- SKU info cache (7-day TTL — language lists are stable) ---
+
+type skuCacheEntry struct {
+	RawJSON   []byte
+	ExpiresAt time.Time
+}
+
+var (
+	skuCache    = make(map[string]skuCacheEntry)
+	skuCacheMu  sync.RWMutex
+	skuCacheTTL = 7 * 24 * time.Hour
+)
+
+// --- Download link cache (dynamic TTL from URL expiry) ---
+
+type linkCacheEntry struct {
+	RawJSON    []byte
+	ExpiresAt  time.Time // soft expiry: stop serving without stale fallback
+	FetchedAt  time.Time
+}
+
+var (
+	linkCache   = make(map[string]linkCacheEntry)
+	linkCacheMu sync.RWMutex
+)
+
+// --- Negative cache (60s — prevents thundering herd during rate-limit events) ---
+
+type negCacheEntry struct {
+	Message   string
+	HTTPCode  int
+	ExpiresAt time.Time
+}
+
+var (
+	negCache    = make(map[string]negCacheEntry)
+	negCacheMu  sync.RWMutex
+	negCacheTTL = 60 * time.Second
+)
+
+// --- Singleflight (one in-flight Microsoft fetch per unique key) ---
+
+var sfGroup singleflight.Group
 
 // --- Evalcenter (Enterprise / Server eval ISOs) ---
 
@@ -74,12 +122,73 @@ var (
 		"server-2016": {Name: "Windows Server 2016", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-server-2016"},
 		"win11-ent":   {Name: "Windows 11 Enterprise", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-11-enterprise"},
 	}
-	evalCache      = make(map[string]evalCacheEntry)
-	evalCacheMu    sync.RWMutex
-	evalCacheTTL   = 24 * time.Hour
-	fwlinkRe  = regexp.MustCompile(`https://go\.microsoft\.com/fwlink/[^"'\s<>]+`)
-	isoLangRe = regexp.MustCompile(`_([a-z]{2}-[a-z]{2})\.iso$`)
+	evalCache    = make(map[string]evalCacheEntry)
+	evalCacheMu  sync.RWMutex
+	evalCacheTTL = 24 * time.Hour
+	fwlinkRe     = regexp.MustCompile(`https://go\.microsoft\.com/fwlink/[^"'\s<>]+`)
+	isoLangRe    = regexp.MustCompile(`_([a-z]{2}-[a-z]{2})\.iso$`)
 )
+
+// --- Helpers ---
+
+// jitter adds a random ±maxJ offset to base duration.
+// Prevents synchronised mass-expiry spikes across cache entries.
+func jitter(base, maxJ time.Duration) time.Duration {
+	offset := time.Duration(rand.Int63n(int64(maxJ*2))) - maxJ
+	return base + offset
+}
+
+// parseLinkExpiry reads the `se` (signed expiry) query param from the first
+// download URL in a Microsoft GetProductDownloadLinksBySku response and returns
+// a cache expiry time of (se - now) - 30min, with ±5min jitter.
+// Falls back to 22h on any parse failure.
+func parseLinkExpiry(rawJSON []byte) time.Time {
+	fallback := func() time.Time {
+		return time.Now().Add(jitter(22*time.Hour, 5*time.Minute))
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(rawJSON, &data); err != nil {
+		return fallback()
+	}
+	opts, ok := data["ProductDownloadOptions"].([]interface{})
+	if !ok || len(opts) == 0 {
+		return fallback()
+	}
+	first, ok := opts[0].(map[string]interface{})
+	if !ok {
+		return fallback()
+	}
+	uri, ok := first["Uri"].(string)
+	if !ok {
+		return fallback()
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return fallback()
+	}
+	se := u.Query().Get("se")
+	if se == "" {
+		return fallback()
+	}
+	t, err := time.Parse(time.RFC3339, se)
+	if err != nil {
+		return fallback()
+	}
+	ttl := time.Until(t) - 30*time.Minute
+	if ttl < time.Hour {
+		ttl = time.Hour // safety floor — never cache for less than 1h
+	}
+	return time.Now().Add(jitter(ttl, 5*time.Minute))
+}
+
+// rateLimitError marks a Microsoft rate-limit response so callers can choose
+// to serve stale data instead of propagating the error.
+type rateLimitError struct{ message string }
+
+func (e *rateLimitError) Error() string { return e.message }
+
+// --- Evalcenter helpers ---
 
 func detectArch(rawURL string) string {
 	lower := strings.ToLower(rawURL)
@@ -106,7 +215,6 @@ func detectLang(rawURL string) string {
 func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	// Step 1: Fetch the evalcenter page to extract fwlinks
 	req, _ := http.NewRequest("GET", evalURL, nil)
 	req.Header.Set("User-Agent", UA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
@@ -117,10 +225,8 @@ func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
 	defer resp.Body.Close()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	// Step 2: Extract all fwlink URLs (unescape HTML entities like &amp; → &)
 	rawMatches := fwlinkRe.FindAllString(string(bodyBytes), -1)
 
-	// Deduplicate fwlinks
 	seen := map[string]bool{}
 	var fwlinks []string
 	for _, raw := range rawMatches {
@@ -131,7 +237,6 @@ func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
 		}
 	}
 
-	// Step 3: Follow all redirects in parallel
 	type result struct {
 		link EvalLink
 		ok   bool
@@ -168,7 +273,6 @@ func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
 		}
 	}
 
-	// Sort: en-us first, then alphabetically by lang
 	sort.Slice(links, func(i, j int) bool {
 		if links[i].Lang == "en-us" {
 			return true
@@ -182,14 +286,14 @@ func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
 	return links, nil
 }
 
+// --- CF Worker / session helpers ---
+
 func setWorkerSecret(req *http.Request) {
 	if workerSecret != "" {
 		req.Header.Set("X-Worker-Secret", workerSecret)
 	}
 }
 
-// proxyURL rewrites a Microsoft URL to go through the CF Worker when CF_WORKER_URL is set.
-// The Worker receives the original host via ?host= and forwards the request from Cloudflare's edge.
 func proxyURL(msURL string) string {
 	workerBase := os.Getenv("CF_WORKER_URL")
 	if workerBase == "" {
@@ -210,7 +314,6 @@ func proxyURL(msURL string) string {
 	return workerParsed.String()
 }
 
-// Map product ID to referer URL
 func getReferer(productId string) string {
 	id, err := strconv.Atoi(productId)
 	if err != nil {
@@ -225,21 +328,18 @@ func getReferer(productId string) string {
 	return "https://www.microsoft.com/en-us/software-download/windows8ISO"
 }
 
-// Replicate Fido session tracking
 func setupSession() (string, error) {
 	sessionID := uuid.New().String()
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	// Step 1: Register session
 	q1 := url.Values{}
 	q1.Set("org_id", ORG_ID)
 	q1.Set("session_id", sessionID)
 	req1, _ := http.NewRequest("GET", proxyURL("https://vlscppe.microsoft.com/tags?"+q1.Encode()), nil)
 	req1.Header.Set("User-Agent", UA)
 	setWorkerSecret(req1)
-	client.Do(req1) // Ignore errors intentionally
+	client.Do(req1)
 
-	// Step 2: Fetch tracking JS
 	q2 := url.Values{}
 	q2.Set("instanceId", CUSTOMER_ID)
 	q2.Set("PageId", "si")
@@ -249,21 +349,19 @@ func setupSession() (string, error) {
 	setWorkerSecret(req2)
 	resp2, err := client.Do(req2)
 	if err != nil {
-		return sessionID, nil // Proceed anyway
+		return sessionID, nil
 	}
 	defer resp2.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp2.Body)
 	mdtText := string(bodyBytes)
 
-	// Regex to extract w and rticks
 	reW := regexp.MustCompile(`[&?]w=([^&"'\s]+)`)
 	reRt := regexp.MustCompile(`rticks[="]+\+?\s*(\d{10,})`)
 
 	wMatch := reW.FindStringSubmatch(mdtText)
 	rtMatch := reRt.FindStringSubmatch(mdtText)
 
-	// Step 3: Send fingerprint response
 	if len(wMatch) > 1 && len(rtMatch) > 1 {
 		wVal := wMatch[1]
 		rtVal := rtMatch[1]
@@ -287,7 +385,6 @@ func setupSession() (string, error) {
 	return sessionID, nil
 }
 
-// Map DownloadType code to string
 func mapDownloadType(typeNum int) string {
 	switch typeNum {
 	case 0:
@@ -301,59 +398,12 @@ func mapDownloadType(typeNum int) string {
 	}
 }
 
-// Background cleanup for stale sessions
-func cleanupSessions() {
-	for {
-		time.Sleep(1 * time.Minute)
-		cacheMutex.Lock()
-		now := time.Now()
-		for key, entry := range sessionCache {
-			if now.Sub(entry.CreatedAt) > SESSION_TTL {
-				delete(sessionCache, key)
-			}
-		}
-		cacheMutex.Unlock()
-	}
-}
+// --- Microsoft fetch functions (called via singleflight) ---
 
-// Middleware for CORS
-func enableCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		// Allowed origins
-		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func respondJSONError(w http.ResponseWriter, status int, message string) {
-	log.Printf("ERROR [%d]: %s\n", status, message)
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
-}
-
-// --- /skuinfo endpoint ---
-func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	productID := r.URL.Query().Get("product_id")
-	if productID == "" {
-		respondJSONError(w, http.StatusBadRequest, "product_id query parameter is required")
-		return
-	}
-	if _, err := strconv.Atoi(productID); err != nil {
-		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
-		return
-	}
-
+// fetchSkuInfoFromMS performs the full Microsoft session + SKU info fetch.
+// Returns (rawJSON, httpErrorCode, error). httpErrorCode is non-zero only on
+// rate-limit/API errors that should be stored in the negative cache.
+func fetchSkuInfoFromMS(productID string) ([]byte, int, error) {
 	sessionID, _ := setupSession()
 
 	cacheMutex.Lock()
@@ -371,8 +421,8 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	var finalData map[string]interface{}
+	var finalRaw []byte
 
-	// Retry logic
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			time.Sleep(2 * time.Second)
@@ -386,8 +436,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		resp, err := client.Do(req)
 		if err != nil {
 			if attempt == 2 {
-				respondJSONError(w, http.StatusBadGateway, "Request failed: "+err.Error())
-				return
+				return nil, 0, fmt.Errorf("request failed: %w", err)
 			}
 			continue
 		}
@@ -395,15 +444,17 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, http.StatusTooManyRequests, &rateLimitError{"Microsoft is rate-limiting requests. Please try again shortly."}
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			if attempt == 2 {
-				respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes)))
-				return
+				return nil, http.StatusBadGateway, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 			}
 			continue
 		}
 
-		// Double encoded decode logic
 		if len(bodyBytes) > 0 && bodyBytes[0] == '"' {
 			var unquoted string
 			json.Unmarshal(bodyBytes, &unquoted)
@@ -413,54 +464,42 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		var data map[string]interface{}
 		json.Unmarshal(bodyBytes, &data)
 
-		// Check for specific MS errors
 		if errs, ok := data["Errors"].([]interface{}); ok && len(errs) > 0 {
 			if attempt == 2 {
 				msg := "Microsoft API error"
+				code := http.StatusBadGateway
 				if errMap, ok := errs[0].(map[string]interface{}); ok {
 					if val, exists := errMap["Value"]; exists {
 						msg = val.(string)
 					}
+					// 715-123130 rate-limit code
+					if typeNum, ok := errMap["Type"].(float64); ok && int(typeNum) == 9 {
+						code = http.StatusTooManyRequests
+						return nil, code, &rateLimitError{msg}
+					}
 				}
-				respondJSONError(w, http.StatusBadGateway, msg)
-				return
+				return nil, code, fmt.Errorf("%s", msg)
 			}
 			continue
 		}
 
 		finalData = data
+		finalRaw = bodyBytes
 		break
 	}
 
 	skus, ok := finalData["Skus"].([]interface{})
 	if !ok || len(skus) == 0 {
-		respondJSONError(w, http.StatusNotFound, "No languages found for this product ID.")
-		return
+		return nil, http.StatusNotFound, fmt.Errorf("no languages found for this product ID")
 	}
 
-	log.Printf("/skuinfo: product_id=%s -> %d languages (session=%s)\n", productID, len(skus), sessionID[:8])
-	json.NewEncoder(w).Encode(finalData)
+	log.Printf("MS fetch /skuinfo: product_id=%s -> %d languages\n", productID, len(skus))
+	return finalRaw, 0, nil
 }
 
-// --- /proxy endpoint ---
-func handleProxy(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	productID := r.URL.Query().Get("product_id")
-	skuID := r.URL.Query().Get("sku_id")
-
-	if productID == "" || skuID == "" {
-		respondJSONError(w, http.StatusBadRequest, "product_id and sku_id query parameters are required")
-		return
-	}
-	if _, err := strconv.Atoi(productID); err != nil {
-		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
-		return
-	}
-	if !validSkuID.MatchString(skuID) {
-		respondJSONError(w, http.StatusBadRequest, "sku_id contains invalid characters")
-		return
-	}
-
+// fetchDownloadLinksFromMS performs the Microsoft download link fetch.
+// Returns (rawJSON, error). rateLimitError is returned on 429/715-123130.
+func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 	var sessionID string
 	cacheMutex.RLock()
 	cached, exists := sessionCache[productID]
@@ -468,12 +507,12 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	if exists && time.Since(cached.CreatedAt) < SESSION_TTL {
 		sessionID = cached.SessionID
-		log.Printf("/proxy: Reusing session %s for product_id=%s\n", sessionID[:8], productID)
+		log.Printf("MS fetch /proxy: reusing session %s for product_id=%s\n", sessionID[:8], productID)
 	} else {
-		log.Printf("/proxy: No valid session for product_id=%s, creating new one...\n", productID)
+		log.Printf("MS fetch /proxy: new session for product_id=%s\n", productID)
 		sessionID, _ = setupSession()
 
-		// Warmup with SKU info request
+		// Warm the session with a SKU info call
 		warmupQ := url.Values{}
 		warmupQ.Set("profile", PROFILE)
 		warmupQ.Set("productEditionId", productID)
@@ -514,18 +553,19 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		respondJSONError(w, http.StatusBadGateway, "Request failed: "+err.Error())
-		return
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		respondJSONError(w, http.StatusBadGateway, fmt.Sprintf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes)))
-		return
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, &rateLimitError{"Microsoft is rate-limiting requests. Please try again shortly."}
 	}
 
-	// Double encoded decode
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	if len(bodyBytes) > 0 && bodyBytes[0] == '"' {
 		var unquoted string
 		json.Unmarshal(bodyBytes, &unquoted)
@@ -535,32 +575,25 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	var data map[string]interface{}
 	json.Unmarshal(bodyBytes, &data)
 
-	// Check for Microsoft errors
 	if errs, ok := data["Errors"].([]interface{}); ok && len(errs) > 0 {
 		if errMap, ok := errs[0].(map[string]interface{}); ok {
-			if typeNum, exists := errMap["Type"].(float64); exists && typeNum == 9 {
-				respondJSONError(w, http.StatusTooManyRequests, "Your IP has been temporarily blocked by Microsoft. Please try again later. (Code 715-123130)")
-				return
+			if typeNum, exists := errMap["Type"].(float64); exists && int(typeNum) == 9 {
+				msg := "Your IP has been temporarily blocked by Microsoft. Please try again later. (Code 715-123130)"
+				if val, ok := errMap["Value"].(string); ok {
+					msg = val
+				}
+				return nil, &rateLimitError{msg}
 			}
 			if val, exists := errMap["Value"].(string); exists {
-				respondJSONError(w, http.StatusBadGateway, val)
-				return
+				return nil, fmt.Errorf("%s", val)
 			}
 		}
-		respondJSONError(w, http.StatusBadGateway, "Microsoft API error")
-		return
+		return nil, fmt.Errorf("Microsoft API error")
 	}
 
-	optsRaw, exists := data["ProductDownloadOptions"]
-	if !exists {
-		respondJSONError(w, http.StatusNotFound, "No download links found for this SKU.")
-		return
-	}
-
-	opts, ok := optsRaw.([]interface{})
+	opts, ok := data["ProductDownloadOptions"].([]interface{})
 	if !ok || len(opts) == 0 {
-		respondJSONError(w, http.StatusNotFound, "No download links found for this SKU.")
-		return
+		return nil, fmt.Errorf("no download links found for this SKU")
 	}
 
 	for _, optRaw := range opts {
@@ -573,17 +606,229 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("/proxy: product_id=%s, sku_id=%s -> %d links\n", productID, skuID, len(opts))
+	log.Printf("MS fetch /proxy: product_id=%s sku_id=%s -> %d links\n", productID, skuID, len(opts))
 
-	// Write pure JSON
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // Don't encode & to & in URLs!
+	enc.SetEscapeHTML(false)
 	enc.Encode(data)
-	w.Write(buf.Bytes())
+	return buf.Bytes(), nil
+}
+
+// --- Background helpers ---
+
+func cleanupSessions() {
+	for {
+		time.Sleep(1 * time.Minute)
+		cacheMutex.Lock()
+		now := time.Now()
+		for key, entry := range sessionCache {
+			if now.Sub(entry.CreatedAt) > SESSION_TTL {
+				delete(sessionCache, key)
+			}
+		}
+		cacheMutex.Unlock()
+	}
+}
+
+// --- CORS middleware ---
+
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func respondJSONError(w http.ResponseWriter, status int, message string) {
+	log.Printf("ERROR [%d]: %s\n", status, message)
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+// --- /skuinfo endpoint ---
+
+func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	productID := r.URL.Query().Get("product_id")
+	if productID == "" {
+		respondJSONError(w, http.StatusBadRequest, "product_id query parameter is required")
+		return
+	}
+	if _, err := strconv.Atoi(productID); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
+		return
+	}
+
+	negKey := "sku:" + productID
+
+	// 1. Check negative cache (short-circuit during rate-limit events)
+	negCacheMu.RLock()
+	neg, hasNeg := negCache[negKey]
+	negCacheMu.RUnlock()
+	if hasNeg && time.Now().Before(neg.ExpiresAt) {
+		log.Printf("/skuinfo: product_id=%s -> neg cache hit\n", productID)
+		respondJSONError(w, neg.HTTPCode, neg.Message)
+		return
+	}
+
+	// 2. Check SKU cache (7-day TTL)
+	skuCacheMu.RLock()
+	entry, hasSku := skuCache[productID]
+	skuCacheMu.RUnlock()
+	if hasSku && time.Now().Before(entry.ExpiresAt) {
+		log.Printf("/skuinfo: product_id=%s -> cache hit\n", productID)
+		w.Write(entry.RawJSON)
+		return
+	}
+
+	// 3. Singleflight: collapse concurrent cache misses into one Microsoft fetch
+	type sfResult struct {
+		raw  []byte
+		code int
+	}
+	v, err, _ := sfGroup.Do(negKey, func() (interface{}, error) {
+		raw, code, err := fetchSkuInfoFromMS(productID)
+		return sfResult{raw: raw, code: code}, err
+	})
+
+	if err != nil {
+		res := v.(sfResult)
+		code := res.code
+		if code == 0 {
+			code = http.StatusBadGateway
+		}
+		// 4. Store in negative cache only for rate-limit / API errors
+		if _, isRL := err.(*rateLimitError); isRL || code == http.StatusTooManyRequests {
+			negCacheMu.Lock()
+			negCache[negKey] = negCacheEntry{
+				Message:   err.Error(),
+				HTTPCode:  http.StatusTooManyRequests,
+				ExpiresAt: time.Now().Add(negCacheTTL),
+			}
+			negCacheMu.Unlock()
+		}
+		respondJSONError(w, code, err.Error())
+		return
+	}
+
+	res := v.(sfResult)
+
+	// 5. Store in SKU cache with 7-day TTL + jitter
+	skuCacheMu.Lock()
+	skuCache[productID] = skuCacheEntry{
+		RawJSON:   res.raw,
+		ExpiresAt: time.Now().Add(jitter(skuCacheTTL, 5*time.Minute)),
+	}
+	skuCacheMu.Unlock()
+
+	log.Printf("/skuinfo: product_id=%s -> fetched and cached\n", productID)
+	w.Write(res.raw)
+}
+
+// --- /proxy endpoint ---
+
+func handleProxy(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	productID := r.URL.Query().Get("product_id")
+	skuID := r.URL.Query().Get("sku_id")
+
+	if productID == "" || skuID == "" {
+		respondJSONError(w, http.StatusBadRequest, "product_id and sku_id query parameters are required")
+		return
+	}
+	if _, err := strconv.Atoi(productID); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
+		return
+	}
+	if !validSkuID.MatchString(skuID) {
+		respondJSONError(w, http.StatusBadRequest, "sku_id contains invalid characters")
+		return
+	}
+
+	cacheKey := productID + ":" + skuID
+	negKey := "link:" + cacheKey
+
+	// 1. Check link cache (dynamic TTL, stale-on-failure)
+	linkCacheMu.RLock()
+	cached, hasCached := linkCache[cacheKey]
+	linkCacheMu.RUnlock()
+
+	if hasCached && time.Now().Before(cached.ExpiresAt) {
+		log.Printf("/proxy: product_id=%s sku_id=%s -> cache hit\n", productID, skuID)
+		w.Write(cached.RawJSON)
+		return
+	}
+
+	// 2. Check negative cache — but only if no stale data to fall back on
+	if !hasCached {
+		negCacheMu.RLock()
+		neg, hasNeg := negCache[negKey]
+		negCacheMu.RUnlock()
+		if hasNeg && time.Now().Before(neg.ExpiresAt) {
+			log.Printf("/proxy: product_id=%s sku_id=%s -> neg cache hit\n", productID, skuID)
+			respondJSONError(w, neg.HTTPCode, neg.Message)
+			return
+		}
+	}
+
+	// 3. Singleflight: one fetch per (product, sku) key
+	v, err, _ := sfGroup.Do(negKey, func() (interface{}, error) {
+		return fetchDownloadLinksFromMS(productID, skuID)
+	})
+
+	if err != nil {
+		// 6. Stale-on-failure: serve expired cache entry rather than erroring out
+		if hasCached {
+			log.Printf("/proxy: product_id=%s sku_id=%s -> fetch failed (%v), serving stale\n", productID, skuID, err)
+			w.Write(cached.RawJSON)
+			return
+		}
+
+		code := http.StatusBadGateway
+		// 4. Negative cache for rate-limit errors (only when no stale available)
+		if _, isRL := err.(*rateLimitError); isRL {
+			code = http.StatusTooManyRequests
+			negCacheMu.Lock()
+			negCache[negKey] = negCacheEntry{
+				Message:   err.Error(),
+				HTTPCode:  code,
+				ExpiresAt: time.Now().Add(negCacheTTL),
+			}
+			negCacheMu.Unlock()
+		}
+		respondJSONError(w, code, err.Error())
+		return
+	}
+
+	raw := v.([]byte)
+
+	// 5. Dynamic TTL: parse `se` from signed URL, subtract 30min buffer, add jitter
+	expiresAt := parseLinkExpiry(raw)
+
+	linkCacheMu.Lock()
+	linkCache[cacheKey] = linkCacheEntry{
+		RawJSON:   raw,
+		ExpiresAt: expiresAt,
+		FetchedAt: time.Now(),
+	}
+	linkCacheMu.Unlock()
+
+	log.Printf("/proxy: product_id=%s sku_id=%s -> fetched and cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	w.Write(raw)
 }
 
 // --- /evallinks endpoint ---
+
 func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	product := r.URL.Query().Get("product")
@@ -598,7 +843,6 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check cache
 	evalCacheMu.RLock()
 	cached, exists := evalCache[product]
 	evalCacheMu.RUnlock()
@@ -611,10 +855,21 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 
 	links, err := fetchEvalLinks(evalProduct.EvalURL)
 	if err != nil {
+		// Stale-on-failure for eval links too
+		if exists {
+			log.Printf("/evallinks: product=%s -> fetch failed, serving stale\n", product)
+			json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
+			return
+		}
 		respondJSONError(w, http.StatusBadGateway, "Failed to fetch eval links: "+err.Error())
 		return
 	}
 	if len(links) == 0 {
+		if exists {
+			log.Printf("/evallinks: product=%s -> 0 links returned, serving stale\n", product)
+			json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
+			return
+		}
 		respondJSONError(w, http.StatusNotFound, "No download links found for this eval product")
 		return
 	}
@@ -623,11 +878,10 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 	evalCache[product] = evalCacheEntry{Links: links, CachedAt: time.Now()}
 	evalCacheMu.Unlock()
 
-	log.Printf("/evallinks: product=%s -> %d links\n", product, len(links))
+	log.Printf("/evallinks: product=%s -> %d links cached\n", product, len(links))
 	json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: links})
 }
 
-// warmEvalCache pre-fetches all eval product links in the background at startup.
 func warmEvalCache() {
 	for slug, product := range evalProductMap {
 		go func(s string, p EvalProduct) {
@@ -650,7 +904,6 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// API Routing
 	mux.HandleFunc("/skuinfo", handleSkuInfo)
 	mux.HandleFunc("/proxy", handleProxy)
 	mux.HandleFunc("/evallinks", handleEvalLinks)
@@ -658,8 +911,6 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-
-	// Plain root response
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
