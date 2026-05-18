@@ -25,6 +25,10 @@ const faqs: FaqItem[] = [
     a: 'Absolutely — and we strongly recommend it. Microsoft throttles single-threaded browser downloads. Tools like aria2 (aria2c -x 16 -s 16 --disable-ipv6=true "URL") or IDM use 16 parallel connections, which typically give you full line speed on their CDN.',
   },
   {
+    q: 'Do you have Windows Server or Enterprise ISOs?',
+    a: 'Yes — check the Enterprise & Server section (/eval). It includes Windows Server 2025, 2022, 2019, 2016, and Windows 11 Enterprise. These are official 180-day evaluation editions sourced directly from Microsoft\'s Eval Center CDN — no browser session, no registration required. They\'re fully functional for testing and lab use; a valid license is needed to activate beyond the trial period.',
+  },
+  {
     q: 'What\'s the difference between the various product IDs?',
     a: 'Each Windows release has a unique product ID on Microsoft\'s servers. For example, 3262 is Windows 11 25H2 (x64) and 3265 is Windows 11 25H2 (ARM64). MSDL exposes all known IDs so you can always find the exact build you need.',
   },

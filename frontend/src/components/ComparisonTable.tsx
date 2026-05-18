@@ -11,11 +11,12 @@ interface Row {
 }
 
 const rows: Row[] = [
-  { feature: 'Direct CDN link',      msdl: true,     official: true,     others: false },
-  { feature: 'No browser required',  msdl: true,     official: false,    others: 'varies' },
-  { feature: 'ARM64 support',        msdl: true,     official: false,    others: false },
-  { feature: 'No account needed',    msdl: true,     official: true,     others: 'varies' },
-  { feature: 'No ads or tracking',   msdl: true,     official: true,     others: false },
+  { feature: 'Direct CDN link',           msdl: true,     official: true,     others: false },
+  { feature: 'No browser required',       msdl: true,     official: false,    others: 'varies' },
+  { feature: 'ARM64 support',             msdl: true,     official: false,    others: false },
+  { feature: 'Server & Enterprise ISOs',  msdl: true,     official: false,    others: false },
+  { feature: 'No account needed',         msdl: true,     official: true,     others: 'varies' },
+  { feature: 'No ads or tracking',        msdl: true,     official: true,     others: false },
 ]
 
 function Cell({ value, highlight = false }: { value: CellValue; highlight?: boolean }) {
