@@ -30,7 +30,7 @@ export default function DisclaimerPage() {
         >
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">Disclaimer</h1>
-            <p className="text-xs font-mono text-zinc-600">Last updated: April 9, 2026</p>
+            <p className="text-xs font-mono text-zinc-600">Last updated: May 18, 2026</p>
           </div>
 
           <div className="p-4 rounded-xl border border-amber-500/15 bg-amber-500/6 text-amber-400/80 text-[12px] leading-relaxed">

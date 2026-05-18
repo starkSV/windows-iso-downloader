@@ -30,7 +30,7 @@ export default function PrivacyPolicyPage() {
         >
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">Privacy Policy</h1>
-            <p className="text-xs font-mono text-zinc-600">Last updated: April 9, 2026</p>
+            <p className="text-xs font-mono text-zinc-600">Last updated: May 18, 2026</p>
           </div>
 
           <Section title="No data collected">
@@ -59,6 +59,20 @@ export default function PrivacyPolicyPage() {
               All Windows ISO files are hosted on Microsoft's official content delivery network
               (<code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">software.download.prss.microsoft.com</code>).
               We are not responsible for Microsoft's privacy practices or link availability.
+            </p>
+            <p>
+              API requests to Microsoft are routed through a Cloudflare Worker running on
+              Cloudflare's edge network. Cloudflare may process request metadata in transit
+              in accordance with their{' '}
+              <a
+                href="https://www.cloudflare.com/privacypolicy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                privacy policy
+              </a>.
+              No user data or download links are stored by the Worker.
             </p>
           </Section>
 
