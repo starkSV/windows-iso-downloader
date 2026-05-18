@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"sync"
@@ -34,7 +35,36 @@ var (
 	sessionCache = make(map[string]SessionEntry)
 	cacheMutex   sync.RWMutex
 	SESSION_TTL  = 15 * time.Minute
+	workerSecret = os.Getenv("CF_WORKER_SECRET")
 )
+
+func setWorkerSecret(req *http.Request) {
+	if workerSecret != "" {
+		req.Header.Set("X-Worker-Secret", workerSecret)
+	}
+}
+
+// proxyURL rewrites a Microsoft URL to go through the CF Worker when CF_WORKER_URL is set.
+// The Worker receives the original host via ?host= and forwards the request from Cloudflare's edge.
+func proxyURL(msURL string) string {
+	workerBase := os.Getenv("CF_WORKER_URL")
+	if workerBase == "" {
+		return msURL
+	}
+	parsed, err := url.Parse(msURL)
+	if err != nil {
+		return msURL
+	}
+	workerParsed, err := url.Parse(workerBase)
+	if err != nil {
+		return msURL
+	}
+	q := parsed.Query()
+	q.Set("host", parsed.Hostname())
+	workerParsed.Path = parsed.Path
+	workerParsed.RawQuery = q.Encode()
+	return workerParsed.String()
+}
 
 // Map product ID to referer URL
 func getReferer(productId string) string {
@@ -60,8 +90,9 @@ func setupSession() (string, error) {
 	q1 := url.Values{}
 	q1.Set("org_id", ORG_ID)
 	q1.Set("session_id", sessionID)
-	req1, _ := http.NewRequest("GET", "https://vlscppe.microsoft.com/tags?"+q1.Encode(), nil)
+	req1, _ := http.NewRequest("GET", proxyURL("https://vlscppe.microsoft.com/tags?"+q1.Encode()), nil)
 	req1.Header.Set("User-Agent", UA)
+	setWorkerSecret(req1)
 	client.Do(req1) // Ignore errors intentionally
 
 	// Step 2: Fetch tracking JS
@@ -69,8 +100,9 @@ func setupSession() (string, error) {
 	q2.Set("instanceId", CUSTOMER_ID)
 	q2.Set("PageId", "si")
 	q2.Set("session_id", sessionID)
-	req2, _ := http.NewRequest("GET", "https://ov-df.microsoft.com/mdt.js?"+q2.Encode(), nil)
+	req2, _ := http.NewRequest("GET", proxyURL("https://ov-df.microsoft.com/mdt.js?"+q2.Encode()), nil)
 	req2.Header.Set("User-Agent", UA)
+	setWorkerSecret(req2)
 	resp2, err := client.Do(req2)
 	if err != nil {
 		return sessionID, nil // Proceed anyway
@@ -100,10 +132,11 @@ func setupSession() (string, error) {
 		q3.Set("w", wVal)
 		q3.Set("mdt", fmt.Sprintf("%d", mdt))
 		q3.Set("rticks", rtVal)
-		fpURL := "https://ov-df.microsoft.com/?" + q3.Encode()
+		fpURL := proxyURL("https://ov-df.microsoft.com/?" + q3.Encode())
 
 		req3, _ := http.NewRequest("GET", fpURL, nil)
 		req3.Header.Set("User-Agent", UA)
+		setWorkerSecret(req3)
 		client.Do(req3)
 	}
 
@@ -190,7 +223,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 	skuQ.Set("friendlyFileName", "undefined")
 	skuQ.Set("Locale", LOCALE)
 	skuQ.Set("sessionID", sessionID)
-	reqURL := "https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + skuQ.Encode()
+	reqURL := proxyURL("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + skuQ.Encode())
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	var finalData map[string]interface{}
@@ -204,6 +237,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("User-Agent", UA)
 		req.Header.Set("Referer", getReferer(productID))
 		req.Header.Set("Accept", "application/json")
+		setWorkerSecret(req)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -303,13 +337,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		warmupQ.Set("friendlyFileName", "undefined")
 		warmupQ.Set("Locale", LOCALE)
 		warmupQ.Set("sessionID", sessionID)
-		warmupURL := "https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + warmupQ.Encode()
+		warmupURL := proxyURL("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + warmupQ.Encode())
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequest("GET", warmupURL, nil)
 		req.Header.Set("User-Agent", UA)
 		req.Header.Set("Referer", getReferer(productID))
 		req.Header.Set("Accept", "application/json")
+		setWorkerSecret(req)
 		client.Do(req)
 
 		cacheMutex.Lock()
@@ -324,13 +359,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	proxyQ.Set("friendlyFileName", "undefined")
 	proxyQ.Set("Locale", LOCALE)
 	proxyQ.Set("sessionID", sessionID)
-	reqURL := "https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?" + proxyQ.Encode()
+	reqURL := proxyURL("https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?" + proxyQ.Encode())
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, _ := http.NewRequest("GET", reqURL, nil)
 	req.Header.Set("User-Agent", UA)
 	req.Header.Set("Referer", getReferer(productID))
 	req.Header.Set("Accept", "application/json")
+	setWorkerSecret(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
