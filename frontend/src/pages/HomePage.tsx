@@ -66,7 +66,7 @@ const jsonLd = {
   applicationCategory: 'UtilitiesApplication',
   operatingSystem: 'Web',
   url: SITE_URL,
-  description: 'Download official Microsoft Windows ISO files for Windows 11, 10, and 8.1. Direct links from Microsoft CDN. Free, no registration.',
+  description: 'Download official Microsoft Windows ISO files for Windows 11, 10, 8.1, and Windows Server. Direct links from Microsoft CDN. Free, no registration.',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
 }
 

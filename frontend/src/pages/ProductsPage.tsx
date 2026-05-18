@@ -36,7 +36,7 @@ export default function ProductsPage() {
 
   return (
     <>
-      <title>All Windows Releases | Windows ISO Downloader</title>
+      <title>All Windows ISO Releases | Windows ISO Downloader</title>
       <meta name="description" content="Browse all official Microsoft Windows ISO releases available for direct download. Windows 11, 10, and 8.1." />
       <link rel="canonical" href={`${SITE_URL}/products`} />
       <meta property="og:title" content="All Windows ISO Releases | Windows ISO Downloader" />

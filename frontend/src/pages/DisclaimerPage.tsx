@@ -20,6 +20,7 @@ export default function DisclaimerPage() {
       <meta property="og:title" content="Disclaimer | Windows ISO Downloader" />
       <meta property="og:description" content="Legal disclaimer for MSDL. Not affiliated with Microsoft Corporation." />
       <meta property="og:url" content={`${SITE_URL}/disclaimer`} />
+      <meta name="robots" content="noindex, follow" />
 
       <div className="max-w-2xl mx-auto px-4 pt-12 pb-10">
         <motion.div

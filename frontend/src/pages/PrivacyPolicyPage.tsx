@@ -20,6 +20,7 @@ export default function PrivacyPolicyPage() {
       <meta property="og:title" content="Privacy Policy | Windows ISO Downloader" />
       <meta property="og:description" content="Privacy policy for MSDL. We log no data, use no trackers, and proxy no files." />
       <meta property="og:url" content={`${SITE_URL}/privacy-policy`} />
+      <meta name="robots" content="noindex, follow" />
 
       <div className="max-w-2xl mx-auto px-4 pt-12 pb-10">
         <motion.div
