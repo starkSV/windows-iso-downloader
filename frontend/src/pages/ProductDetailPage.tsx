@@ -75,7 +75,7 @@ export default function ProductDetailPage() {
     : hasCatalogError
     ? 'Failed to load product catalog.'
     : productName
-    ? `Download official ISO image for ${productName}. Direct links pulled securely from Microsoft CDN servers.`
+    ? `Download the official ${productName} ISO directly from Microsoft's CDN. No registration, no proxy — real-time signed links.`
     : ''
 
   const canonicalUrl = `${SITE_URL}/product/${productId}`
@@ -88,6 +88,17 @@ export default function ProductDetailPage() {
       { '@type': 'ListItem', position: 2, name: 'All Releases', item: `${SITE_URL}/products` },
       { '@type': 'ListItem', position: 3, name: productName, item: canonicalUrl },
     ],
+  } : null
+
+  const softwareJsonLd = productName && !isNotFound && !hasCatalogError ? {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: productName,
+    operatingSystem: 'Windows',
+    applicationCategory: 'OperatingSystem',
+    url: canonicalUrl,
+    description: pageDescription,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   } : null
 
   // Load product name + build string
@@ -209,8 +220,11 @@ export default function ProductDetailPage() {
       {breadcrumbJsonLd && (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       )}
+      {softwareJsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }} />
+      )}
 
-      <div className="max-w-xl mx-auto px-5 pt-12 pb-10">
+      <div className="max-w-2xl mx-auto px-5 pt-12 pb-10">
         {/* Back */}
         <button
           onClick={() => window.history.state?.idx ? navigate(-1) : navigate('/')}

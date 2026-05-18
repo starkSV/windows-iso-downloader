@@ -36,14 +36,14 @@ export default function ProductsPage() {
 
   return (
     <>
-      <title>All Windows Releases | Windows ISO Downloader</title>
+      <title>All Windows ISO Releases | Windows ISO Downloader</title>
       <meta name="description" content="Browse all official Microsoft Windows ISO releases available for direct download. Windows 11, 10, and 8.1." />
       <link rel="canonical" href={`${SITE_URL}/products`} />
       <meta property="og:title" content="All Windows ISO Releases | Windows ISO Downloader" />
       <meta property="og:description" content="Browse all official Microsoft Windows ISO releases available for direct download." />
       <meta property="og:url" content={`${SITE_URL}/products`} />
 
-      <div className="max-w-3xl mx-auto px-4 pt-12 pb-10">
+      <div className="max-w-4xl mx-auto px-4 pt-12 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

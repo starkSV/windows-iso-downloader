@@ -8,7 +8,17 @@ import ProductDetailPage from './pages/ProductDetailPage'
 import AboutPage from './pages/AboutPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import DisclaimerPage from './pages/DisclaimerPage'
+import EvalPage from './pages/EvalPage'
+import EvalDetailPage from './pages/EvalDetailPage'
 import NotFoundPage from './pages/NotFoundPage'
+import { evalSlugSet } from './data/evalProducts'
+import { useParams } from 'react-router-dom'
+
+function ProductRouter() {
+  const { productId } = useParams<{ productId: string }>()
+  if (productId && evalSlugSet.has(productId)) return <EvalDetailPage />
+  return <ProductDetailPage />
+}
 import ScrollToTop from './components/ScrollToTop'
 
 export default function App() {
@@ -19,7 +29,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
-          <Route path="/product/:productId" element={<ProductDetailPage />} />
+          <Route path="/product/:productId" element={<ProductRouter />} />
+          <Route path="/eval" element={<EvalPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/disclaimer" element={<DisclaimerPage />} />

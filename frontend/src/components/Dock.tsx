@@ -24,7 +24,12 @@ export default function Dock() {
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
-    const idx = items.findIndex(item => item.path && item.path === location.pathname)
+    // Exact match first
+    let idx = items.findIndex(item => item.path && item.path === location.pathname)
+    // /product/* and /eval* → highlight Products tab
+    if (idx === -1 && (location.pathname.startsWith('/product/') || location.pathname.startsWith('/eval'))) {
+      idx = items.findIndex(item => item.path === '/products')
+    }
     if (idx !== -1) setActiveIndex(idx)
   }, [location.pathname])
 
