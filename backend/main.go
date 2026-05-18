@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +41,146 @@ var (
 	workerSecret = os.Getenv("CF_WORKER_SECRET")
 	validSkuID   = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 )
+
+// --- Evalcenter (Enterprise / Server eval ISOs) ---
+
+type EvalProduct struct {
+	Name    string
+	EvalURL string
+}
+
+type EvalLink struct {
+	Arch string `json:"arch"`
+	Lang string `json:"lang"`
+	URL  string `json:"url"`
+}
+
+type EvalLinksResponse struct {
+	Product string     `json:"product"`
+	Name    string     `json:"name"`
+	Links   []EvalLink `json:"links"`
+}
+
+type evalCacheEntry struct {
+	Links    []EvalLink
+	CachedAt time.Time
+}
+
+var (
+	evalProductMap = map[string]EvalProduct{
+		"server-2025": {Name: "Windows Server 2025", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-server-2025"},
+		"server-2022": {Name: "Windows Server 2022", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-server-2022"},
+		"server-2019": {Name: "Windows Server 2019", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-server-2019"},
+		"server-2016": {Name: "Windows Server 2016", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-server-2016"},
+		"win11-ent":   {Name: "Windows 11 Enterprise", EvalURL: "https://www.microsoft.com/en-us/evalcenter/download-windows-11-enterprise"},
+	}
+	evalCache      = make(map[string]evalCacheEntry)
+	evalCacheMu    sync.RWMutex
+	evalCacheTTL   = 24 * time.Hour
+	fwlinkRe  = regexp.MustCompile(`https://go\.microsoft\.com/fwlink/[^"'\s<>]+`)
+	isoLangRe = regexp.MustCompile(`_([a-z]{2}-[a-z]{2})\.iso$`)
+)
+
+func detectArch(rawURL string) string {
+	lower := strings.ToLower(rawURL)
+	if strings.Contains(lower, "arm64") {
+		return "ARM64"
+	}
+	if strings.Contains(lower, "x64") {
+		return "x64"
+	}
+	if strings.Contains(lower, "x86") {
+		return "x86"
+	}
+	return "ISO"
+}
+
+func detectLang(rawURL string) string {
+	m := isoLangRe.FindStringSubmatch(strings.ToLower(rawURL))
+	if len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+func fetchEvalLinks(evalURL string) ([]EvalLink, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// Step 1: Fetch the evalcenter page to extract fwlinks
+	req, _ := http.NewRequest("GET", evalURL, nil)
+	req.Header.Set("User-Agent", UA)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching evalcenter page: %w", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	// Step 2: Extract all fwlink URLs (unescape HTML entities like &amp; → &)
+	rawMatches := fwlinkRe.FindAllString(string(bodyBytes), -1)
+
+	// Deduplicate fwlinks
+	seen := map[string]bool{}
+	var fwlinks []string
+	for _, raw := range rawMatches {
+		fwlink := html.UnescapeString(raw)
+		if !seen[fwlink] {
+			seen[fwlink] = true
+			fwlinks = append(fwlinks, fwlink)
+		}
+	}
+
+	// Step 3: Follow all redirects in parallel
+	type result struct {
+		link EvalLink
+		ok   bool
+	}
+	results := make([]result, len(fwlinks))
+	var wg sync.WaitGroup
+	for i, fwlink := range fwlinks {
+		wg.Add(1)
+		go func(idx int, fw string) {
+			defer wg.Done()
+			fwReq, _ := http.NewRequest("GET", fw, nil)
+			fwReq.Header.Set("User-Agent", UA)
+			fwResp, err := client.Do(fwReq)
+			if err != nil {
+				return
+			}
+			fwResp.Body.Close()
+			finalURL := fwResp.Request.URL.String()
+			if !strings.Contains(strings.ToLower(finalURL), ".iso") {
+				return
+			}
+			results[idx] = result{
+				link: EvalLink{Arch: detectArch(finalURL), Lang: detectLang(finalURL), URL: finalURL},
+				ok:   true,
+			}
+		}(i, fwlink)
+	}
+	wg.Wait()
+
+	var links []EvalLink
+	for _, r := range results {
+		if r.ok {
+			links = append(links, r.link)
+		}
+	}
+
+	// Sort: en-us first, then alphabetically by lang
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Lang == "en-us" {
+			return true
+		}
+		if links[j].Lang == "en-us" {
+			return false
+		}
+		return links[i].Lang < links[j].Lang
+	})
+
+	return links, nil
+}
 
 func setWorkerSecret(req *http.Request) {
 	if workerSecret != "" {
@@ -178,7 +321,7 @@ func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		// Allowed origins
-		if origin == "https://msdl.tech-latest.com" || origin == "http://localhost:5173" || origin == "http://localhost:3000" {
+		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
 
@@ -440,14 +583,77 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
+// --- /evallinks endpoint ---
+func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	product := r.URL.Query().Get("product")
+	if product == "" {
+		respondJSONError(w, http.StatusBadRequest, "product query parameter is required")
+		return
+	}
+
+	evalProduct, ok := evalProductMap[product]
+	if !ok {
+		respondJSONError(w, http.StatusNotFound, "Unknown eval product: "+product)
+		return
+	}
+
+	// Check cache
+	evalCacheMu.RLock()
+	cached, exists := evalCache[product]
+	evalCacheMu.RUnlock()
+
+	if exists && time.Since(cached.CachedAt) < evalCacheTTL {
+		log.Printf("/evallinks: product=%s -> cache hit (%d links)\n", product, len(cached.Links))
+		json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
+		return
+	}
+
+	links, err := fetchEvalLinks(evalProduct.EvalURL)
+	if err != nil {
+		respondJSONError(w, http.StatusBadGateway, "Failed to fetch eval links: "+err.Error())
+		return
+	}
+	if len(links) == 0 {
+		respondJSONError(w, http.StatusNotFound, "No download links found for this eval product")
+		return
+	}
+
+	evalCacheMu.Lock()
+	evalCache[product] = evalCacheEntry{Links: links, CachedAt: time.Now()}
+	evalCacheMu.Unlock()
+
+	log.Printf("/evallinks: product=%s -> %d links\n", product, len(links))
+	json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: links})
+}
+
+// warmEvalCache pre-fetches all eval product links in the background at startup.
+func warmEvalCache() {
+	for slug, product := range evalProductMap {
+		go func(s string, p EvalProduct) {
+			links, err := fetchEvalLinks(p.EvalURL)
+			if err != nil || len(links) == 0 {
+				log.Printf("eval warm: %s failed: %v\n", s, err)
+				return
+			}
+			evalCacheMu.Lock()
+			evalCache[s] = evalCacheEntry{Links: links, CachedAt: time.Now()}
+			evalCacheMu.Unlock()
+			log.Printf("eval warm: %s -> %d links cached\n", s, len(links))
+		}(slug, product)
+	}
+}
+
 func main() {
 	go cleanupSessions()
+	go warmEvalCache()
 
 	mux := http.NewServeMux()
 
 	// API Routing
 	mux.HandleFunc("/skuinfo", handleSkuInfo)
 	mux.HandleFunc("/proxy", handleProxy)
+	mux.HandleFunc("/evallinks", handleEvalLinks)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))

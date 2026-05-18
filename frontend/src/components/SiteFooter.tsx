@@ -9,6 +9,8 @@ export default function SiteFooter() {
         All ISO files are hosted on Microsoft's official CDN.
       </p>
       <div className="flex items-center justify-center gap-4 mt-2 text-[11px] text-zinc-700">
+        <Link to="/eval" className="hover:text-zinc-500 transition-colors">Enterprise & Server</Link>
+        <span>·</span>
         <Link to="/privacy-policy" className="hover:text-zinc-500 transition-colors">Privacy Policy</Link>
         <span>·</span>
         <Link to="/disclaimer" className="hover:text-zinc-500 transition-colors">Disclaimer</Link>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Server } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
 import StatsBar from '../components/StatsBar'
 import HowItWorks from '../components/HowItWorks'
@@ -159,6 +159,34 @@ export default function HomePage() {
               </Link>
             </motion.div>
           ))}
+        </motion.div>
+
+        {/* Enterprise & Server CTA */}
+        <motion.div
+          className="mb-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.45 }}
+        >
+          <Link
+            to="/eval"
+            className="group flex items-center justify-between w-full px-5 py-3.5 rounded-xl border border-violet-500/15 bg-violet-500/5 hover:border-violet-500/25 hover:bg-violet-500/8 transition-all duration-200"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <Server size={14} className="text-violet-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white/80 group-hover:text-white transition-colors leading-tight">
+                  Enterprise & Server ISOs
+                </p>
+                <p className="text-[11px] text-zinc-600 mt-0.5">
+                  Server 2025, 2022, 2019, 2016 · Win 11 Enterprise · Eval editions
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={14} className="text-zinc-600 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
+          </Link>
         </motion.div>
 
         {/* Browse all CTA */}
