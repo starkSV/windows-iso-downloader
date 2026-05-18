@@ -36,6 +36,7 @@ var (
 	cacheMutex   sync.RWMutex
 	SESSION_TTL  = 15 * time.Minute
 	workerSecret = os.Getenv("CF_WORKER_SECRET")
+	validSkuID   = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 )
 
 func setWorkerSecret(req *http.Request) {
@@ -312,8 +313,8 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		respondJSONError(w, http.StatusBadRequest, "product_id must be a numeric value")
 		return
 	}
-	if _, err := strconv.Atoi(skuID); err != nil {
-		respondJSONError(w, http.StatusBadRequest, "sku_id must be a numeric value")
+	if !validSkuID.MatchString(skuID) {
+		respondJSONError(w, http.StatusBadRequest, "sku_id contains invalid characters")
 		return
 	}
 
