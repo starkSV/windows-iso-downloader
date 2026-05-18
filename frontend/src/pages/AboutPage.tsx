@@ -67,8 +67,12 @@ export default function AboutPage() {
               <li>Call the download links API using the warmed session to get signed CDN URLs</li>
             </ol>
             <p>
-              Links are IP-tied to the server and expire after 24 hours — this is standard
-              Microsoft behaviour, not a limitation of MSDL.
+              Outbound requests to Microsoft are routed through a Cloudflare Worker, which
+              distributes traffic across Cloudflare's global edge IPs. This prevents any single
+              IP from being rate-limited by Microsoft under high traffic.
+            </p>
+            <p>
+              Links expire after 24 hours — this is standard Microsoft behaviour, not a limitation of MSDL.
             </p>
           </Section>
 

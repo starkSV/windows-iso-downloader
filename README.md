@@ -37,8 +37,9 @@ MSDL replicates the session flow that Microsoft uses to serve ISO download links
 
 ```
 windows-iso-downloader/
-├── frontend/      # React 19 + TypeScript + Vite + Tailwind v4
-├── backend/       # Go proxy server (recommended for production)
+├── frontend/            # React 19 + TypeScript + Vite + Tailwind v4
+├── backend/             # Go proxy server (recommended for production)
+├── cloudflare-worker/   # Optional CF Worker for distributed IP routing
 └── README.md
 ```
 
@@ -47,15 +48,17 @@ windows-iso-downloader/
 ## How It Works
 
 ```
-Browser → Backend Proxy → Microsoft Download API → Signed CDN URL
-                               ↓
-               1. Register session (Microsoft tracking endpoint)
-               2. Parse MDT fingerprint script
-               3. Fetch SKU list (available languages)
-               4. Fetch signed CDN download URL
+Browser → Backend → (CF Worker) → Microsoft API → Signed CDN URL
+                          ↓
+          1. Register session (Microsoft tracking endpoint)
+          2. Parse MDT fingerprint script
+          3. Fetch SKU list (available languages)
+          4. Fetch signed CDN download URL
 ```
 
 The flow mirrors [Fido.ps1](https://github.com/pbatard/Fido) by Pete Batard — the same script bundled with Rufus.
+
+Outbound requests to Microsoft are optionally routed through a Cloudflare Worker (`cloudflare-worker/worker.js`). This distributes requests across Cloudflare's global edge IPs instead of a single server IP, preventing Microsoft's rate-limit block (error 715-123130) under high traffic. The Worker is opt-in via environment variables — omit them to go direct to Microsoft.
 
 ---
 
@@ -83,6 +86,17 @@ Create `frontend/.env.local`:
 ```env
 VITE_API_URL=http://localhost:3002
 ```
+
+#### Optional: Cloudflare Worker (recommended for production)
+
+Deploy `cloudflare-worker/worker.js` to Cloudflare Workers, then set these on the backend:
+
+```env
+CF_WORKER_URL=https://your-worker.your-name.workers.dev
+CF_WORKER_SECRET=your-secret   # must match the CF_WORKER_SECRET secret set in the Worker's settings
+```
+
+Omit both to go direct to Microsoft (fine for local development and low-traffic self-hosting).
 
 ---
 
@@ -167,14 +181,15 @@ Returns signed download links from Microsoft's CDN.
 
 ## Deployment
 
-> ⚠️ **Deploy the backend to a standard VPS** (Hetzner, DigitalOcean, Linode, etc.) — **not** serverless platforms like Vercel, Cloudflare Workers, or AWS Lambda. Microsoft rate-limits known datacenter IP ranges.
-
 Recommended setup:
 
 | Component | Platform |
 |---|---|
 | Frontend | Cloudflare Pages / Vercel (static) |
-| Backend | VPS with a non-datacenter IP |
+| Backend | VPS (Hetzner, DigitalOcean, Linode, etc.) |
+| Outbound proxy | Cloudflare Worker (optional, recommended for public instances) |
+
+> ⚠️ **Deploy the Go backend to a standard VPS**, not serverless platforms. The Cloudflare Worker is used only as an outbound proxy for Microsoft API calls — the backend itself must be a long-running process with session state.
 
 ---
 
