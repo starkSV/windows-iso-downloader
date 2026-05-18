@@ -50,16 +50,39 @@ windows-iso-downloader/
 
 ```
 Browser → Backend → (CF Worker) → Microsoft API → Signed CDN URL
-                          ↓
+              ↓
+         Cache check (hit → return immediately, no Microsoft call)
+              ↓ miss
           1. Register session (Microsoft tracking endpoint)
           2. Parse MDT fingerprint script
           3. Fetch SKU list (available languages)
           4. Fetch signed CDN download URL
+          5. Cache result → return to browser
 ```
 
 The flow mirrors [Fido.ps1](https://github.com/pbatard/Fido) by Pete Batard — the same script bundled with Rufus.
 
 Outbound requests to Microsoft are optionally routed through a Cloudflare Worker (`cloudflare-worker/worker.js`). This distributes requests across Cloudflare's global edge IPs instead of a single server IP, preventing Microsoft's rate-limit block (error 715-123130) under high traffic. The Worker is opt-in via environment variables — omit them to go direct to Microsoft.
+
+### Caching layer
+
+The backend uses a four-layer in-memory cache to reduce Microsoft API calls from thousands per day to ~50–100, preventing the 715-123130 rate-limit block under real traffic.
+
+| Cache | Key | TTL | Purpose |
+|---|---|---|---|
+| SKU cache | `product_id` | 7 days | Language lists are stable; no need to hit Microsoft on every page load |
+| Link cache | `product_id:sku_id` | Dynamic (parsed from `se` param in the signed URL, minus 30 min buffer) | Signed CDN URLs are not IP-bound — safe to serve the same link to all users |
+| Eval cache | `slug` | 24 hours | Eval Center fwlink redirects change rarely |
+| Negative cache | `product_id` or `product_id:sku_id` | 60 seconds | Prevents thundering-herd retries during a rate-limit block |
+
+Additional resilience mechanisms:
+
+- **Singleflight** (`golang.org/x/sync/singleflight`) — collapses concurrent cache misses into a single Microsoft fetch. 500 simultaneous misses → 1 outbound call.
+- **Stale-on-failure** — if a cache refresh fails (rate-limited or transient error), the expired entry is served temporarily while a background refresh is attempted through singleflight.
+- **Jitter** — ±5 min random offset on TTLs prevents synchronized mass-expiry spikes.
+- **Cache eviction** — a background goroutine evicts expired entries every 30 minutes.
+
+All caches are in-memory only and reset on restart. Monitor them via the [`/metrics` endpoint](#get-metricssecret).
 
 ---
 
@@ -95,9 +118,10 @@ Deploy `cloudflare-worker/worker.js` to Cloudflare Workers, then set these on th
 ```env
 CF_WORKER_URL=https://your-worker.your-name.workers.dev
 CF_WORKER_SECRET=your-secret   # must match the CF_WORKER_SECRET secret set in the Worker's settings
+METRICS_SECRET=your-metrics-secret  # enables the /metrics endpoint; omit to disable it
 ```
 
-Omit both to go direct to Microsoft (fine for local development and low-traffic self-hosting).
+Omit `CF_WORKER_URL` / `CF_WORKER_SECRET` to go direct to Microsoft (fine for local development and low-traffic self-hosting).
 
 ---
 
@@ -146,6 +170,20 @@ Valid slugs: `server-2025`, `server-2022`, `server-2019`, `server-2016`, `win11-
     { "arch": "x64", "lang": "en-us", "url": "https://software-static.download.prss.microsoft.com/..." },
     { "arch": "x64", "lang": "fr-fr", "url": "https://software-static.download.prss.microsoft.com/..." }
   ]
+}
+```
+
+### `GET /metrics?secret=<secret>`
+
+Returns real-time cache statistics for the running instance. Auth via `?secret=` query param or `Authorization: Bearer <secret>` header. Requires `METRICS_SECRET` env var to be set.
+
+```json
+{
+  "sku":  { "requests": 42, "cache_hits": 39, "ms_fetches": 3, "neg_hits": 0, "hit_rate": "92.9%", "cache_size": 8 },
+  "link": { "requests": 38, "cache_hits": 35, "ms_fetches": 3, "neg_hits": 0, "stale": 0, "hit_rate": "92.1%", "cache_size": 6 },
+  "eval": { "requests": 12, "cache_hits": 12, "stale": 0, "hit_rate": "100.0%", "cache_size": 5 },
+  "neg_cache_size": 0,
+  "total_ms_fetches": 6
 }
 ```
 
@@ -201,9 +239,10 @@ Valid slugs: `server-2025`, `server-2022`, `server-2019`, `server-2016`, `win11-
 
 | | |
 |---|---|
-| Language | Go 1.22+ |
+| Language | Go 1.25+ |
 | HTTP | `net/http` (stdlib, no framework) |
-| Session cache | `sync.RWMutex` in-memory · 15 min TTL |
+| Caching | 4-layer in-memory · `sync.RWMutex` · dynamic TTL |
+| Concurrency | `golang.org/x/sync/singleflight` |
 | UUID | `github.com/google/uuid` |
 | MDT parsing | `regexp` (stdlib) |
 
