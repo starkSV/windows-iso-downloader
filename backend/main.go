@@ -16,11 +16,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
 )
+
+// Package-level rand source — avoids global mutex contention under concurrent load.
+// Go 1.20+ auto-seeds the global rand, but a local source is faster at high QPS.
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 const (
 	UA          = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -90,6 +95,28 @@ var (
 
 var sfGroup singleflight.Group
 
+// --- Metrics counters (atomic — no mutex needed) ---
+
+var (
+	// /skuinfo
+	mSkuRequests  int64
+	mSkuCacheHits int64
+	mSkuNegHits   int64
+	mSkuFetches   int64 // actual Microsoft calls
+
+	// /proxy
+	mLinkRequests  int64
+	mLinkCacheHits int64
+	mLinkNegHits   int64
+	mLinkFetches   int64
+	mLinkStale     int64 // stale-on-failure serves
+
+	// /evallinks
+	mEvalRequests  int64
+	mEvalCacheHits int64
+	mEvalStale     int64
+)
+
 // --- Evalcenter (Enterprise / Server eval ISOs) ---
 
 type EvalProduct struct {
@@ -134,7 +161,7 @@ var (
 // jitter adds a random ±maxJ offset to base duration.
 // Prevents synchronised mass-expiry spikes across cache entries.
 func jitter(base, maxJ time.Duration) time.Duration {
-	offset := time.Duration(rand.Int63n(int64(maxJ*2))) - maxJ
+	offset := time.Duration(rng.Int63n(int64(maxJ*2))) - maxJ
 	return base + offset
 }
 
@@ -669,6 +696,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	atomic.AddInt64(&mSkuRequests, 1)
 	negKey := "sku:" + productID
 
 	// 1. Check negative cache (short-circuit during rate-limit events)
@@ -676,6 +704,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 	neg, hasNeg := negCache[negKey]
 	negCacheMu.RUnlock()
 	if hasNeg && time.Now().Before(neg.ExpiresAt) {
+		atomic.AddInt64(&mSkuNegHits, 1)
 		log.Printf("/skuinfo: product_id=%s -> neg cache hit\n", productID)
 		respondJSONError(w, neg.HTTPCode, neg.Message)
 		return
@@ -686,17 +715,19 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 	entry, hasSku := skuCache[productID]
 	skuCacheMu.RUnlock()
 	if hasSku && time.Now().Before(entry.ExpiresAt) {
+		atomic.AddInt64(&mSkuCacheHits, 1)
 		log.Printf("/skuinfo: product_id=%s -> cache hit\n", productID)
 		w.Write(entry.RawJSON)
 		return
 	}
 
 	// 3. Singleflight: collapse concurrent cache misses into one Microsoft fetch
+	sfKey := "sku:" + productID
 	type sfResult struct {
 		raw  []byte
 		code int
 	}
-	v, err, _ := sfGroup.Do(negKey, func() (interface{}, error) {
+	v, err, _ := sfGroup.Do(sfKey, func() (interface{}, error) {
 		raw, code, err := fetchSkuInfoFromMS(productID)
 		return sfResult{raw: raw, code: code}, err
 	})
@@ -731,6 +762,7 @@ func handleSkuInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	skuCacheMu.Unlock()
 
+	atomic.AddInt64(&mSkuFetches, 1)
 	log.Printf("/skuinfo: product_id=%s -> fetched and cached\n", productID)
 	w.Write(res.raw)
 }
@@ -755,6 +787,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	atomic.AddInt64(&mLinkRequests, 1)
 	cacheKey := productID + ":" + skuID
 	negKey := "link:" + cacheKey
 
@@ -764,6 +797,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	linkCacheMu.RUnlock()
 
 	if hasCached && time.Now().Before(cached.ExpiresAt) {
+		atomic.AddInt64(&mLinkCacheHits, 1)
 		log.Printf("/proxy: product_id=%s sku_id=%s -> cache hit\n", productID, skuID)
 		w.Write(cached.RawJSON)
 		return
@@ -775,6 +809,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		neg, hasNeg := negCache[negKey]
 		negCacheMu.RUnlock()
 		if hasNeg && time.Now().Before(neg.ExpiresAt) {
+			atomic.AddInt64(&mLinkNegHits, 1)
 			log.Printf("/proxy: product_id=%s sku_id=%s -> neg cache hit\n", productID, skuID)
 			respondJSONError(w, neg.HTTPCode, neg.Message)
 			return
@@ -782,14 +817,34 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Singleflight: one fetch per (product, sku) key
-	v, err, _ := sfGroup.Do(negKey, func() (interface{}, error) {
+	sfKey := "link:" + cacheKey
+	v, err, _ := sfGroup.Do(sfKey, func() (interface{}, error) {
 		return fetchDownloadLinksFromMS(productID, skuID)
 	})
 
 	if err != nil {
 		// 6. Stale-on-failure: serve expired cache entry rather than erroring out
+		// Also fire a background refresh so the next request gets fresh data.
 		if hasCached {
+			atomic.AddInt64(&mLinkStale, 1)
 			log.Printf("/proxy: product_id=%s sku_id=%s -> fetch failed (%v), serving stale\n", productID, skuID, err)
+			go func() {
+				// Use singleflight so concurrent stale serves don't all hit Microsoft
+				sfBgKey := "link:" + cacheKey
+				sfGroup.Do(sfBgKey, func() (interface{}, error) {
+					raw, bgErr := fetchDownloadLinksFromMS(productID, skuID)
+					if bgErr != nil {
+						log.Printf("/proxy: background refresh failed for %s:%s: %v\n", productID, skuID, bgErr)
+						return nil, bgErr
+					}
+					exp := parseLinkExpiry(raw)
+					linkCacheMu.Lock()
+					linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: exp, FetchedAt: time.Now()}
+					linkCacheMu.Unlock()
+					log.Printf("/proxy: background refresh succeeded for %s:%s, cached until %s\n", productID, skuID, exp.Format(time.RFC3339))
+					return nil, nil
+				})
+			}()
 			w.Write(cached.RawJSON)
 			return
 		}
@@ -823,6 +878,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	linkCacheMu.Unlock()
 
+	atomic.AddInt64(&mLinkFetches, 1)
 	log.Printf("/proxy: product_id=%s sku_id=%s -> fetched and cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
 	w.Write(raw)
 }
@@ -843,11 +899,13 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	atomic.AddInt64(&mEvalRequests, 1)
 	evalCacheMu.RLock()
 	cached, exists := evalCache[product]
 	evalCacheMu.RUnlock()
 
 	if exists && time.Since(cached.CachedAt) < evalCacheTTL {
+		atomic.AddInt64(&mEvalCacheHits, 1)
 		log.Printf("/evallinks: product=%s -> cache hit (%d links)\n", product, len(cached.Links))
 		json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
 		return
@@ -857,6 +915,7 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Stale-on-failure for eval links too
 		if exists {
+			atomic.AddInt64(&mEvalStale, 1)
 			log.Printf("/evallinks: product=%s -> fetch failed, serving stale\n", product)
 			json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
 			return
@@ -866,6 +925,7 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(links) == 0 {
 		if exists {
+			atomic.AddInt64(&mEvalStale, 1)
 			log.Printf("/evallinks: product=%s -> 0 links returned, serving stale\n", product)
 			json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: cached.Links})
 			return
@@ -880,6 +940,132 @@ func handleEvalLinks(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("/evallinks: product=%s -> %d links cached\n", product, len(links))
 	json.NewEncoder(w).Encode(EvalLinksResponse{Product: product, Name: evalProduct.Name, Links: links})
+}
+
+// --- Cache eviction (prevents unbounded map growth) ---
+
+func cleanupCaches() {
+	ticker := time.NewTicker(30 * time.Minute)
+	for range ticker.C {
+		now := time.Now()
+		var skuDel, linkDel, negDel int
+
+		skuCacheMu.Lock()
+		for k, v := range skuCache {
+			if now.After(v.ExpiresAt) {
+				delete(skuCache, k)
+				skuDel++
+			}
+		}
+		skuCacheMu.Unlock()
+
+		// Keep link entries for 4h past soft expiry — stale-on-failure window
+		linkCacheMu.Lock()
+		for k, v := range linkCache {
+			if now.After(v.ExpiresAt.Add(4 * time.Hour)) {
+				delete(linkCache, k)
+				linkDel++
+			}
+		}
+		linkCacheMu.Unlock()
+
+		negCacheMu.Lock()
+		for k, v := range negCache {
+			if now.After(v.ExpiresAt) {
+				delete(negCache, k)
+				negDel++
+			}
+		}
+		negCacheMu.Unlock()
+
+		if skuDel+linkDel+negDel > 0 {
+			log.Printf("cache cleanup: evicted sku=%d link=%d neg=%d\n", skuDel, linkDel, negDel)
+		}
+	}
+}
+
+// --- /metrics endpoint ---
+
+func handleMetrics(w http.ResponseWriter, r *http.Request) {
+	secret := os.Getenv("METRICS_SECRET")
+	if secret == "" {
+		respondJSONError(w, http.StatusForbidden, "metrics endpoint not configured")
+		return
+	}
+
+	provided := r.URL.Query().Get("secret")
+	if provided == "" {
+		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	if provided != secret {
+		respondJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	skuReqs := atomic.LoadInt64(&mSkuRequests)
+	skuHits := atomic.LoadInt64(&mSkuCacheHits)
+	skuFetches := atomic.LoadInt64(&mSkuFetches)
+	skuNeg := atomic.LoadInt64(&mSkuNegHits)
+
+	linkReqs := atomic.LoadInt64(&mLinkRequests)
+	linkHits := atomic.LoadInt64(&mLinkCacheHits)
+	linkFetches := atomic.LoadInt64(&mLinkFetches)
+	linkNeg := atomic.LoadInt64(&mLinkNegHits)
+	linkStale := atomic.LoadInt64(&mLinkStale)
+
+	evalReqs := atomic.LoadInt64(&mEvalRequests)
+	evalHits := atomic.LoadInt64(&mEvalCacheHits)
+	evalStale := atomic.LoadInt64(&mEvalStale)
+
+	hitRate := func(hits, total int64) string {
+		if total == 0 {
+			return "N/A"
+		}
+		return fmt.Sprintf("%.1f%%", float64(hits)/float64(total)*100)
+	}
+
+	skuCacheMu.RLock()
+	skuSize := len(skuCache)
+	skuCacheMu.RUnlock()
+	linkCacheMu.RLock()
+	linkSize := len(linkCache)
+	linkCacheMu.RUnlock()
+	negCacheMu.RLock()
+	negSize := len(negCache)
+	negCacheMu.RUnlock()
+	evalCacheMu.RLock()
+	evalSize := len(evalCache)
+	evalCacheMu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"sku": map[string]interface{}{
+			"requests":   skuReqs,
+			"cache_hits": skuHits,
+			"ms_fetches": skuFetches,
+			"neg_hits":   skuNeg,
+			"hit_rate":   hitRate(skuHits, skuReqs),
+			"cache_size": skuSize,
+		},
+		"link": map[string]interface{}{
+			"requests":   linkReqs,
+			"cache_hits": linkHits,
+			"ms_fetches": linkFetches,
+			"neg_hits":   linkNeg,
+			"stale":      linkStale,
+			"hit_rate":   hitRate(linkHits, linkReqs),
+			"cache_size": linkSize,
+		},
+		"eval": map[string]interface{}{
+			"requests":   evalReqs,
+			"cache_hits": evalHits,
+			"stale":      evalStale,
+			"hit_rate":   hitRate(evalHits, evalReqs),
+			"cache_size": evalSize,
+		},
+		"neg_cache_size":   negSize,
+		"total_ms_fetches": skuFetches + linkFetches,
+	})
 }
 
 func warmEvalCache() {
@@ -900,6 +1086,7 @@ func warmEvalCache() {
 
 func main() {
 	go cleanupSessions()
+	go cleanupCaches()
 	go warmEvalCache()
 
 	mux := http.NewServeMux()
@@ -907,6 +1094,7 @@ func main() {
 	mux.HandleFunc("/skuinfo", handleSkuInfo)
 	mux.HandleFunc("/proxy", handleProxy)
 	mux.HandleFunc("/evallinks", handleEvalLinks)
+	mux.HandleFunc("/metrics", handleMetrics)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
