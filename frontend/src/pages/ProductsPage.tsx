@@ -43,7 +43,7 @@ export default function ProductsPage() {
       <meta property="og:description" content="Browse all official Microsoft Windows ISO releases available for direct download." />
       <meta property="og:url" content={`${SITE_URL}/products`} />
 
-      <div className="max-w-3xl mx-auto px-4 pt-12 pb-10">
+      <div className="max-w-4xl mx-auto px-4 pt-12 pb-10">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

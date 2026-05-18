@@ -210,7 +210,7 @@ export default function ProductDetailPage() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       )}
 
-      <div className="max-w-xl mx-auto px-5 pt-12 pb-10">
+      <div className="max-w-2xl mx-auto px-5 pt-12 pb-10">
         {/* Back */}
         <button
           onClick={() => window.history.state?.idx ? navigate(-1) : navigate('/')}
