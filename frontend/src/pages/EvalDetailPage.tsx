@@ -85,8 +85,8 @@ export default function EvalDetailPage() {
   const primaryLink = links[0] ?? null
   const otherLinks = links.slice(1)
 
-  const pageTitle = `${product.name} ISO Download | Windows ISO Downloader`
-  const pageDesc = `Download ${product.name} evaluation ISO directly from Microsoft. ${product.description}`
+  const pageTitle = `${product.name} Evaluation ISO Download | Windows ISO Downloader`
+  const pageDesc = product.seoDesc
   const canonical = `${SITE_URL}/product/${product.slug}`
 
   const breadcrumbJsonLd = {
@@ -99,6 +99,17 @@ export default function EvalDetailPage() {
     ],
   }
 
+  const softwareJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: `${product.name} Evaluation`,
+    operatingSystem: 'Windows',
+    applicationCategory: 'OperatingSystem',
+    url: canonical,
+    description: product.seoDesc,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  }
+
   return (
     <>
       <title>{pageTitle}</title>
@@ -108,6 +119,7 @@ export default function EvalDetailPage() {
       <meta property="og:description" content={pageDesc} />
       <meta property="og:url" content={canonical} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }} />
 
       <div className="max-w-xl mx-auto px-5 pt-12 pb-10">
         {/* Back */}

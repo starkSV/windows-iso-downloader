@@ -5,6 +5,19 @@ import { evalProducts } from '../data/evalProducts'
 
 const SITE_URL = 'https://msdl.tech-latest.com'
 
+const itemListJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'Windows Server & Enterprise Evaluation ISOs',
+  description: 'Official evaluation ISOs for Windows Server and Enterprise editions, direct from Microsoft.',
+  itemListElement: evalProducts.map((p, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: p.name,
+    url: `${SITE_URL}/product/${p.slug}`,
+  })),
+}
+
 const typeColors = {
   server: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
   enterprise: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
@@ -34,6 +47,7 @@ export default function EvalPage() {
       <meta property="og:title" content="Enterprise & Server ISOs | Windows ISO Downloader" />
       <meta property="og:description" content="Download Windows Server and Enterprise evaluation ISOs directly from Microsoft's CDN." />
       <meta property="og:url" content={`${SITE_URL}/eval`} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }} />
 
       <div className="max-w-4xl mx-auto px-5 pt-12 pb-10">
         <motion.div
