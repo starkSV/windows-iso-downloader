@@ -213,7 +213,7 @@ export default function ProductDetailPage() {
       <div className="max-w-xl mx-auto px-5 pt-12 pb-10">
         {/* Back */}
         <button
-          onClick={() => navigate(window.history.state?.idx ? -1 : '/')}
+          onClick={() => window.history.state?.idx ? navigate(-1) : navigate('/')}
           className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 mb-8 transition-colors"
         >
           <ArrowLeft size={15} />
