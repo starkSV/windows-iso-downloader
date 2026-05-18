@@ -14,10 +14,11 @@
 MSDL replicates the session flow that Microsoft uses to serve ISO download links — identical to the approach used by [Rufus/Fido](https://github.com/pbatard/Fido). You get the exact same signed CDN URL Microsoft would give you, just without the browser requirement.
 
 - ✅ Direct Microsoft CDN links — no proxying of actual file data
-- ✅ 38 languages per release
+- ✅ 38 languages per consumer release
 - ✅ ARM64 + x64 + x86 support
+- ✅ Windows Server 2016–2025 and Windows 11 Enterprise evaluation ISOs
 - ✅ No account, no browser lock, no ads, no tracking
-- ✅ Links expire in 24 hours (Microsoft's standard behaviour, not a limitation)
+- ✅ Consumer links expire in 24 hours (Microsoft's standard behaviour, not a limitation)
 
 ---
 
@@ -133,9 +134,26 @@ Returns signed download links from Microsoft's CDN.
 }
 ```
 
+### `GET /evallinks?product=<slug>`
+
+Returns direct CDN links for evaluation ISOs (Server/Enterprise). Links are resolved from Microsoft's Eval Center fwlink redirects and cached for 24 hours.
+
+Valid slugs: `server-2025`, `server-2022`, `server-2019`, `server-2016`, `win11-ent`
+
+```json
+{
+  "links": [
+    { "arch": "x64", "lang": "en-us", "url": "https://software-static.download.prss.microsoft.com/..." },
+    { "arch": "x64", "lang": "fr-fr", "url": "https://software-static.download.prss.microsoft.com/..." }
+  ]
+}
+```
+
 ---
 
 ## Supported Products
+
+### Consumer releases
 
 | Product | ID | Architecture |
 |---|---|---|
@@ -149,6 +167,18 @@ Returns signed download links from Microsoft's CDN.
 | Windows 10 22H2 Home China | 2378 | x64 |
 | Windows 8.1 | 52 | x64 / x86 |
 | Windows 8.1 Single Language | 48 | x64 / x86 |
+
+### Evaluation editions (Server & Enterprise)
+
+180-day trial ISOs sourced directly from Microsoft's Eval Center CDN. No registration required.
+
+| Product | Slug | Architecture |
+|---|---|---|
+| Windows Server 2025 | `server-2025` | x64 |
+| Windows Server 2022 | `server-2022` | x64 |
+| Windows Server 2019 | `server-2019` | x64 |
+| Windows Server 2016 | `server-2016` | x64 |
+| Windows 11 Enterprise | `win11-ent` | x64 |
 
 ---
 
@@ -195,12 +225,18 @@ Recommended setup:
 
 ## Contributing
 
-Pull requests welcome. To add a new Windows release:
+Pull requests welcome. To add a new consumer Windows release:
 
 1. Find the product ID on `www.microsoft.com/software-download-connector/api/`
-2. Add it to `frontend/public/data/products.json`
-3. Add related metadata in `ProductDetailPage.tsx` (`PRODUCT_META`, `RELATED_GROUPS`)
-4. Update the product table in this README
+2. Add it to `frontend/public/data/products.json` (name, archs, badge, related, active)
+3. Update the product table in this README
+
+To add a new evaluation edition:
+
+1. Find the fwlink URL on `microsoft.com/en-us/evalcenter/download-*`
+2. Add the slug and fwlink to the `evalProducts` map in `backend/main.go`
+3. Add the product config to `frontend/src/data/evalProducts.ts`
+4. Update the eval table in this README
 
 ---
 
