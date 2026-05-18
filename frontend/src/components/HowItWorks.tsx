@@ -6,7 +6,7 @@ const steps = [
     num: '1',
     icon: LayoutGrid,
     title: 'Pick a release',
-    desc: 'Choose from Windows 11, 10, and 8.1 across all feature updates.',
+    desc: 'Choose from Windows 11, 10, and 8.1 — or Server 2016–2025 and Enterprise evaluation editions.',
   },
   {
     num: '2',
