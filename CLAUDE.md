@@ -29,7 +29,7 @@ negative cache (60s), dynamic TTL, stale-on-failure, jitter. Verified in product
 - [x] **README architecture section** — caching layer, `/metrics`, env vars documented.
 - [ ] **Per-IP / per-product rate limiter** — deferred; revisit after 1 month of production traffic data.
 
-### Frontend UX improvements — `feat/ux-improvements` (in progress)
+### Frontend UX improvements ✅ DONE (feat/ux-improvements, merged — v1.2.0)
 
 - [x] **Expiry countdown** — parses `se` param from signed URL where available; falls back to "24 hours" for consumer links (Microsoft doesn't include `se` in consumer CDN URLs).
 - [x] **Refresh links** — `?force=true` on `/proxy` bypasses cache, fetches fresh from Microsoft. Button shown when under 6h remaining.
