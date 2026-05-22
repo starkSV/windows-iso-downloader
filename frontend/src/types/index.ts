@@ -12,7 +12,6 @@ export interface SkuInfoResponse {
 export interface DownloadOption {
   Uri: string
   Architecture: string
-  FileSize?: number
 }
 
 export interface ProxyResponse {

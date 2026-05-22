@@ -243,12 +243,6 @@ export default function ProductDetailPage() {
     return `${m}m`
   }
 
-  function formatFileSize(bytes: number): string {
-    if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`
-    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`
-    return `${bytes} B`
-  }
-
   function startExpiryCountdown(expiry: Date) {
     if (expiryTimerRef.current) clearInterval(expiryTimerRef.current)
     const tick = () => setExpiryRemaining(expiry.getTime() - Date.now())
@@ -567,7 +561,6 @@ export default function ProductDetailPage() {
                       const filename = link.Uri.split('/').pop()?.split('?')[0] ?? 'download.iso'
                       const arch = link.Architecture || archFromUri(link.Uri)
                       const isCopied = copiedUri === link.Uri
-                      const sizeStr = link.FileSize ? formatFileSize(link.FileSize) : null
                       return (
                         <div
                           key={link.Uri}
@@ -575,9 +568,7 @@ export default function ProductDetailPage() {
                         >
                           <div className="min-w-0">
                             <p className="text-[12px] font-mono text-white truncate">{filename}</p>
-                            <p className="text-[11px] text-zinc-600 mt-0.5">
-                              {arch}{sizeStr ? ` · ${sizeStr}` : ''}
-                            </p>
+                            <p className="text-[11px] text-zinc-600 mt-0.5">{arch}</p>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <button

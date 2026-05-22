@@ -67,15 +67,13 @@ CF Worker ensures Hetzner IP is never exposed to Microsoft — rate-limit block 
 
 ---
 
-## Planned — Frontend UX improvements
+## In progress — Frontend UX improvements (`feat/ux-improvements`)
 
-| Feature | Notes |
-|---|---|
-| Expiry countdown | Parse `se` param from signed URL, live countdown. Under 6h → show Refresh button |
-| Refresh links | `?force=true` on `/proxy` bypasses cache, returns fresh URL, resets countdown |
-| CLI command tabs | aria2 / wget / curl tabs, persist selection in localStorage, default wget |
-| Recently viewed | localStorage only — active links show countdown, expired show re-fetch CTA |
-| File size | Research first — verify if Microsoft CDN response includes it |
+- **Expiry countdown** — shows on consumer links as static "24h" (Microsoft doesn't include `se` in consumer CDN URLs); would tick live if `se` present
+- **Refresh links** — `?force=true` on `/proxy`, button appears under 6h remaining
+- **CLI command tabs** — wget / curl / aria2, persists in localStorage, replaces old Aria2Tip on all pages
+- **Recently viewed** — localStorage, homepage row, both consumer and eval pages tracked
+- ~~**File size**~~ — not feasible, Microsoft CDN API does not return file size
 
 ---
 
