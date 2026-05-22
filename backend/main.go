@@ -790,21 +790,22 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&mLinkRequests, 1)
 	cacheKey := productID + ":" + skuID
 	negKey := "link:" + cacheKey
+	forceRefresh := r.URL.Query().Get("force") == "true"
 
-	// 1. Check link cache (dynamic TTL, stale-on-failure)
+	// 1. Check link cache (dynamic TTL, stale-on-failure) — skipped when force=true
 	linkCacheMu.RLock()
 	cached, hasCached := linkCache[cacheKey]
 	linkCacheMu.RUnlock()
 
-	if hasCached && time.Now().Before(cached.ExpiresAt) {
+	if !forceRefresh && hasCached && time.Now().Before(cached.ExpiresAt) {
 		atomic.AddInt64(&mLinkCacheHits, 1)
 		log.Printf("/proxy: product_id=%s sku_id=%s -> cache hit\n", productID, skuID)
 		w.Write(cached.RawJSON)
 		return
 	}
 
-	// 2. Check negative cache — but only if no stale data to fall back on
-	if !hasCached {
+	// 2. Check negative cache — but only if no stale data and not a force refresh
+	if !forceRefresh && !hasCached {
 		negCacheMu.RLock()
 		neg, hasNeg := negCache[negKey]
 		negCacheMu.RUnlock()
@@ -818,6 +819,9 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Singleflight: one fetch per (product, sku) key
 	sfKey := "link:" + cacheKey
+	if forceRefresh {
+		sfKey = "link:force:" + cacheKey
+	}
 	v, err, _ := sfGroup.Do(sfKey, func() (interface{}, error) {
 		return fetchDownloadLinksFromMS(productID, skuID)
 	})
@@ -879,7 +883,11 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	linkCacheMu.Unlock()
 
 	atomic.AddInt64(&mLinkFetches, 1)
-	log.Printf("/proxy: product_id=%s sku_id=%s -> fetched and cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	if forceRefresh {
+		log.Printf("/proxy: product_id=%s sku_id=%s -> force refresh, cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	} else {
+		log.Printf("/proxy: product_id=%s sku_id=%s -> fetched and cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	}
 	w.Write(raw)
 }
 

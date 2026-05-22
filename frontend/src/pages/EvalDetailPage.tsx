@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ArrowLeft, Download, ExternalLink, AlertTriangle, Copy, Check, Server, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { evalProducts } from '../data/evalProducts'
-import Aria2Tip from '../components/Aria2Tip'
+import CliCommand from '../components/CliCommand'
 import RelatedReleases from '../components/RelatedReleases'
 import NotFoundPage from './NotFoundPage'
+import { addRecentEntry } from '../components/RecentlyViewed'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
 const SITE_URL = 'https://msdl.tech-latest.com'
@@ -54,6 +55,11 @@ export default function EvalDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
+
+  useEffect(() => {
+    if (!product) return
+    addRecentEntry({ id: product.slug, name: product.name, badge: 'eval' })
+  }, [product?.slug])
 
   useEffect(() => {
     if (!product) return
@@ -323,7 +329,7 @@ export default function EvalDetailPage() {
           </div>
 
           {/* Aria2 tip — outside box, same as consumer page */}
-          <Aria2Tip />
+          <CliCommand />
 
           {/* Also available — outside box, same as consumer page */}
           <RelatedReleases

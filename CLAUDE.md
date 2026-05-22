@@ -13,6 +13,7 @@ controlled by `CF_WORKER_URL` + `CF_WORKER_SECRET` env vars on the backend.
 - Any meaningful feature or multi-file change → feature branch → PR → merge
 - GitHub issues are for bugs and community contributions only — planned features tracked here and in PROGRESS.md
 - Commit messages follow conventional commits: `feat:`, `fix:`, `docs:`, `chore:`
+- **Always test locally before committing or pushing** — research feasibility before implementing (e.g. file size was planned but Microsoft CDN doesn't return it; caught after commit)
 
 ## Backlog (implement when ready, in priority order)
 
@@ -28,13 +29,13 @@ negative cache (60s), dynamic TTL, stale-on-failure, jitter. Verified in product
 - [x] **README architecture section** — caching layer, `/metrics`, env vars documented.
 - [ ] **Per-IP / per-product rate limiter** — deferred; revisit after 1 month of production traffic data.
 
-### Frontend UX improvements (next feature branch)
+### Frontend UX improvements — `feat/ux-improvements` (in progress)
 
-- [ ] **Expiry countdown** — parse `se` param from signed URL, show live countdown. Under 6h remaining → show "Refresh links" button.
-- [ ] **Refresh links** — `?force=true` on `/proxy` bypasses cache, fetches fresh from Microsoft, resets countdown to ~24h.
-- [ ] **CLI command tabs** — aria2 / wget / curl tabs instead of showing all at once. Persist last selected tab in localStorage. Default: wget.
-- [ ] **Recently viewed** — localStorage only. Store product_id, name, version, se param. Show on homepage. Active links show countdown, expired links show "Expired" with re-fetch CTA.
-- [ ] **File size** — verify if Microsoft CDN response includes file size. If yes, show alongside each download link (e.g. `x64 · 5.4 GB`). Research first before implementing.
+- [x] **Expiry countdown** — parses `se` param from signed URL where available; falls back to "24 hours" for consumer links (Microsoft doesn't include `se` in consumer CDN URLs).
+- [x] **Refresh links** — `?force=true` on `/proxy` bypasses cache, fetches fresh from Microsoft. Button shown when under 6h remaining.
+- [x] **CLI command tabs** — wget / curl / aria2 tabs, persists selection in localStorage. Replaces old aria2-only tip. Applied to both consumer and eval pages.
+- [x] **Recently viewed** — localStorage only. Shows on homepage. Consumer + eval pages both tracked. Expired state shown when link expiry known.
+- ~~**File size**~~ — not feasible. Microsoft CDN does not return file size in the API response.
 
 ### Known bugs / open issues
 

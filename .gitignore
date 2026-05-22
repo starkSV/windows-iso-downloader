@@ -51,3 +51,6 @@ logs/
 .cache/
 .temp/
 tmp/
+
+# ── Claude Code internal ───────────────────────────────
+.claude/

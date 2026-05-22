@@ -7,6 +7,7 @@ import StatsBar from '../components/StatsBar'
 import HowItWorks from '../components/HowItWorks'
 import ComparisonTable from '../components/ComparisonTable'
 import FAQAccordion from '../components/FAQAccordion'
+import RecentlyViewed from '../components/RecentlyViewed'
 
 const SITE_URL = 'https://msdl.tech-latest.com'
 
@@ -142,6 +143,9 @@ export default function HomePage() {
         <div className="mb-10">
           <StatsBar />
         </div>
+
+        {/* Recently viewed */}
+        <RecentlyViewed />
 
         {/* Featured grid */}
         <motion.div
