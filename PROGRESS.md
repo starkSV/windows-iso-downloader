@@ -67,6 +67,18 @@ CF Worker ensures Hetzner IP is never exposed to Microsoft — rate-limit block 
 
 ---
 
+## Planned — Frontend UX improvements
+
+| Feature | Notes |
+|---|---|
+| Expiry countdown | Parse `se` param from signed URL, live countdown. Under 6h → show Refresh button |
+| Refresh links | `?force=true` on `/proxy` bypasses cache, returns fresh URL, resets countdown |
+| CLI command tabs | aria2 / wget / curl tabs, persist selection in localStorage, default wget |
+| Recently viewed | localStorage only — active links show countdown, expired show re-fetch CTA |
+| File size | Research first — verify if Microsoft CDN response includes it |
+
+---
+
 ## Deferred
 
 | Item | Notes |
