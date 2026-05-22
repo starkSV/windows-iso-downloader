@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import * as Select from '@radix-ui/react-select'
-import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink, WifiOff, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Sku, DownloadOption } from '../types'
 import SystemRequirements from '../components/SystemRequirements'
-import CliCommand from '../components/CliCommand'
+import Aria2Tip from '../components/Aria2Tip'
 import RelatedReleases from '../components/RelatedReleases'
-import { addRecentEntry, updateRecentExpiry } from '../components/RecentlyViewed'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
 const SITE_URL = 'https://msdl.tech-latest.com'
@@ -58,10 +57,6 @@ export default function ProductDetailPage() {
   const [isNotFound, setIsNotFound] = useState(false)
   const [isValidated, setIsValidated] = useState(false)
   const [hasCatalogError, setHasCatalogError] = useState(false)
-  const [, setLinkExpiry] = useState<Date | null>(null)
-  const [expiryRemaining, setExpiryRemaining] = useState<number | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const expiryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: false })
   const [related, setRelated] = useState<{ id: string; label: string }[]>([])
@@ -80,7 +75,7 @@ export default function ProductDetailPage() {
     : hasCatalogError
     ? 'Failed to load product catalog.'
     : productName
-    ? `Download the official ${productName} ISO directly from Microsoft's CDN. No registration, no proxy — real-time signed links.`
+    ? `Download official ISO image for ${productName}. Direct links pulled securely from Microsoft CDN servers.`
     : ''
 
   const canonicalUrl = `${SITE_URL}/product/${productId}`
@@ -93,17 +88,6 @@ export default function ProductDetailPage() {
       { '@type': 'ListItem', position: 2, name: 'All Releases', item: `${SITE_URL}/products` },
       { '@type': 'ListItem', position: 3, name: productName, item: canonicalUrl },
     ],
-  } : null
-
-  const softwareJsonLd = productName && !isNotFound && !hasCatalogError ? {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: productName,
-    operatingSystem: 'Windows',
-    applicationCategory: 'OperatingSystem',
-    url: canonicalUrl,
-    description: pageDescription,
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   } : null
 
   // Load product name + build string
@@ -140,10 +124,6 @@ export default function ProductDetailPage() {
         setProductName(name)
         const isActive = product.active !== false
         setMeta({ badge: product.badge || '', archs: product.archs || [], active: isActive })
-
-        if (isActive) {
-          addRecentEntry({ id: productId!, name, badge: product.badge })
-        }
 
         setRelated((product.related || []).map(rId => ({
           id: rId,
@@ -193,9 +173,6 @@ export default function ProductDetailPage() {
     setIsFetching(true)
     setError(null)
     setDownloadLinks([])
-    setLinkExpiry(null)
-    setExpiryRemaining(null)
-    if (expiryTimerRef.current) clearInterval(expiryTimerRef.current)
 
     fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}`)
       .then(r => r.json())
@@ -203,12 +180,6 @@ export default function ProductDetailPage() {
         if (data.error) throw new Error(data.error)
         if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
         setDownloadLinks(data.ProductDownloadOptions)
-        const expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
-        setLinkExpiry(expiry)
-        if (expiry) {
-          startExpiryCountdown(expiry)
-          if (productId) updateRecentExpiry(productId, expiry.getTime())
-        }
       })
       .catch(e => {
         setError(e.message)
@@ -224,72 +195,7 @@ export default function ProductDetailPage() {
     setTimeout(() => setCopiedUri(null), 2000)
   }
 
-  function parseSeExpiry(uri: string): Date | null {
-    try {
-      const se = new URL(uri).searchParams.get('se')
-      if (!se) return null
-      const d = new Date(se)
-      return isNaN(d.getTime()) ? null : d
-    } catch {
-      return null
-    }
-  }
-
-  function formatRemaining(ms: number): string {
-    if (ms <= 0) return 'Expired'
-    const h = Math.floor(ms / 3_600_000)
-    const m = Math.floor((ms % 3_600_000) / 60_000)
-    if (h > 0) return `${h}h ${m}m`
-    return `${m}m`
-  }
-
-  function formatFileSize(bytes: number): string {
-    if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`
-    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`
-    return `${bytes} B`
-  }
-
-  function startExpiryCountdown(expiry: Date) {
-    if (expiryTimerRef.current) clearInterval(expiryTimerRef.current)
-    const tick = () => setExpiryRemaining(expiry.getTime() - Date.now())
-    tick()
-    expiryTimerRef.current = setInterval(tick, 10_000)
-  }
-
-  async function handleRefreshLinks() {
-    if (!selectedSku || !productId) return
-    setIsRefreshing(true)
-    setError(null)
-    try {
-      const r = await fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}&force=true`)
-      const data = await r.json()
-      if (data.error) throw new Error(data.error)
-      if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
-      setDownloadLinks(data.ProductDownloadOptions)
-      const expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
-      setLinkExpiry(expiry)
-      if (expiry) {
-        startExpiryCountdown(expiry)
-        if (productId) updateRecentExpiry(productId, expiry.getTime())
-      }
-      toast.success('Links refreshed!')
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Refresh failed'
-      setError(msg)
-      toast.error(msg)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  // Cleanup expiry timer on unmount
-  useEffect(() => {
-    return () => { if (expiryTimerRef.current) clearInterval(expiryTimerRef.current) }
-  }, [])
-
   const firstUri = downloadLinks[0]?.Uri
-  const firstFilename = firstUri ? (firstUri.split('/').pop()?.split('?')[0] ?? 'windows.iso') : undefined
-  const showRefresh = expiryRemaining !== null && expiryRemaining < 6 * 3_600_000
 
   return (
     <>
@@ -303,14 +209,11 @@ export default function ProductDetailPage() {
       {breadcrumbJsonLd && (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       )}
-      {softwareJsonLd && (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }} />
-      )}
 
-      <div className="max-w-2xl mx-auto px-5 pt-12 pb-10">
+      <div className="max-w-xl mx-auto px-5 pt-12 pb-10">
         {/* Back */}
         <button
-          onClick={() => window.history.state?.idx ? navigate(-1) : navigate('/')}
+          onClick={() => navigate(window.history.state?.idx ? -1 : '/')}
           className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-300 mb-8 transition-colors"
         >
           <ArrowLeft size={15} />
@@ -529,37 +432,10 @@ export default function ProductDetailPage() {
                   transition={{ type: 'spring', stiffness: 300, damping: 28 }}
                 >
                   <div className="pt-4 border-t border-white/6 space-y-3">
-                    {/* Expiry row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className={`flex items-center gap-2 p-3 rounded-lg border text-[11px] flex-1 ${
-                        showRefresh
-                          ? 'bg-red-500/6 border-red-500/15 text-red-400/80'
-                          : 'bg-amber-500/6 border-amber-500/12 text-amber-400/80'
-                      }`}>
-                        <AlertTriangle size={12} className="flex-shrink-0" />
-                        {expiryRemaining !== null
-                          ? expiryRemaining <= 0
-                            ? 'Links expired — refresh to get new ones'
-                            : `Expires in ${formatRemaining(expiryRemaining)} · Direct from Microsoft CDN`
-                          : 'Links expire in 24 hours · Direct from Microsoft CDN'
-                        }
-                      </div>
-                      {showRefresh && (
-                        <button
-                          onClick={handleRefreshLinks}
-                          disabled={isRefreshing}
-                          className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-500/12 border border-blue-500/20 text-blue-400 text-[11px] font-medium hover:bg-blue-500/20 disabled:opacity-40 transition-all flex-shrink-0"
-                        >
-                          <motion.span
-                            animate={{ rotate: isRefreshing ? 360 : 0 }}
-                            transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
-                            className="inline-block"
-                          >
-                            <RefreshCw size={11} />
-                          </motion.span>
-                          Refresh
-                        </button>
-                      )}
+                    {/* Warning */}
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/6 border border-amber-500/12 text-amber-400/80 text-[11px]">
+                      <AlertTriangle size={12} className="flex-shrink-0" />
+                      Links expire in 24 hours · IP-tied · Use a download manager for full speed
                     </div>
 
                     {/* Links */}
@@ -567,7 +443,6 @@ export default function ProductDetailPage() {
                       const filename = link.Uri.split('/').pop()?.split('?')[0] ?? 'download.iso'
                       const arch = link.Architecture || archFromUri(link.Uri)
                       const isCopied = copiedUri === link.Uri
-                      const sizeStr = link.FileSize ? formatFileSize(link.FileSize) : null
                       return (
                         <div
                           key={link.Uri}
@@ -575,9 +450,7 @@ export default function ProductDetailPage() {
                         >
                           <div className="min-w-0">
                             <p className="text-[12px] font-mono text-white truncate">{filename}</p>
-                            <p className="text-[11px] text-zinc-600 mt-0.5">
-                              {arch}{sizeStr ? ` · ${sizeStr}` : ''}
-                            </p>
+                            <p className="text-[11px] text-zinc-600 mt-0.5">{arch}</p>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <button
@@ -618,8 +491,8 @@ export default function ProductDetailPage() {
               {/* System requirements */}
               <SystemRequirements isWin11={isWin11(productId!)} />
 
-              {/* CLI command */}
-              {meta.active && <CliCommand downloadUrl={firstUri} filename={firstFilename} />}
+              {/* aria2 tip */}
+              {meta.active && <Aria2Tip downloadUrl={firstUri} />}
 
               {/* Related releases */}
               {related.length > 0 && (
