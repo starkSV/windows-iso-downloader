@@ -38,9 +38,45 @@ const (
 
 // --- Session cache (short-lived, used to chain /skuinfo → /proxy) ---
 
+// simpleCookieJar stores cookies without domain scoping. The standard
+// net/http/cookiejar rejects cookies whose Domain (e.g. .microsoft.com) doesn't
+// match the request URL (our CF Worker domain). This jar stores all cookies and
+// replays them on every request so they flow through the Worker to Microsoft.
+type simpleCookieJar struct {
+	mu      sync.Mutex
+	cookies []*http.Cookie
+}
+
+func (j *simpleCookieJar) SetCookies(_ *url.URL, cookies []*http.Cookie) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for _, c := range cookies {
+		found := false
+		for i, existing := range j.cookies {
+			if existing.Name == c.Name {
+				j.cookies[i] = c
+				found = true
+				break
+			}
+		}
+		if !found {
+			j.cookies = append(j.cookies, c)
+		}
+	}
+}
+
+func (j *simpleCookieJar) Cookies(_ *url.URL) []*http.Cookie {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	out := make([]*http.Cookie, len(j.cookies))
+	copy(out, j.cookies)
+	return out
+}
+
 type SessionEntry struct {
 	SessionID string
 	CreatedAt time.Time
+	Jar       *simpleCookieJar
 }
 
 var (
@@ -355,9 +391,10 @@ func getReferer(productId string) string {
 	return "https://www.microsoft.com/en-us/software-download/windows8ISO"
 }
 
-func setupSession() (string, error) {
+func setupSession() (string, *simpleCookieJar, error) {
 	sessionID := uuid.New().String()
-	client := &http.Client{Timeout: 10 * time.Second}
+	jar := &simpleCookieJar{}
+	client := &http.Client{Timeout: 10 * time.Second, Jar: jar}
 
 	q1 := url.Values{}
 	q1.Set("org_id", ORG_ID)
@@ -376,7 +413,7 @@ func setupSession() (string, error) {
 	setWorkerSecret(req2)
 	resp2, err := client.Do(req2)
 	if err != nil {
-		return sessionID, nil
+		return sessionID, jar, nil
 	}
 	defer resp2.Body.Close()
 
@@ -409,7 +446,7 @@ func setupSession() (string, error) {
 		client.Do(req3)
 	}
 
-	return sessionID, nil
+	return sessionID, jar, nil
 }
 
 func mapDownloadType(typeNum int) string {
@@ -431,10 +468,10 @@ func mapDownloadType(typeNum int) string {
 // Returns (rawJSON, httpErrorCode, error). httpErrorCode is non-zero only on
 // rate-limit/API errors that should be stored in the negative cache.
 func fetchSkuInfoFromMS(productID string) ([]byte, int, error) {
-	sessionID, _ := setupSession()
+	sessionID, jar, _ := setupSession()
 
 	cacheMutex.Lock()
-	sessionCache[productID] = SessionEntry{SessionID: sessionID, CreatedAt: time.Now()}
+	sessionCache[productID] = SessionEntry{SessionID: sessionID, CreatedAt: time.Now(), Jar: jar}
 	cacheMutex.Unlock()
 
 	skuQ := url.Values{}
@@ -446,7 +483,7 @@ func fetchSkuInfoFromMS(productID string) ([]byte, int, error) {
 	skuQ.Set("sessionID", sessionID)
 	reqURL := proxyURL("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + skuQ.Encode())
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second, Jar: jar}
 	var finalData map[string]interface{}
 	var finalRaw []byte
 
@@ -528,18 +565,20 @@ func fetchSkuInfoFromMS(productID string) ([]byte, int, error) {
 // Returns (rawJSON, error). rateLimitError is returned on 429/715-123130.
 func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 	var sessionID string
+	var jar *simpleCookieJar
 	cacheMutex.RLock()
 	cached, exists := sessionCache[productID]
 	cacheMutex.RUnlock()
 
 	if exists && time.Since(cached.CreatedAt) < SESSION_TTL {
 		sessionID = cached.SessionID
+		jar = cached.Jar
 		log.Printf("MS fetch /proxy: reusing session %s for product_id=%s\n", sessionID[:8], productID)
 	} else {
 		log.Printf("MS fetch /proxy: new session for product_id=%s\n", productID)
-		sessionID, _ = setupSession()
+		sessionID, jar, _ = setupSession()
 
-		// Warm the session with a SKU info call
+		// Warm the session with a SKU info call so cookies from setup carry through
 		warmupQ := url.Values{}
 		warmupQ.Set("profile", PROFILE)
 		warmupQ.Set("productEditionId", productID)
@@ -549,17 +588,22 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 		warmupQ.Set("sessionID", sessionID)
 		warmupURL := proxyURL("https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?" + warmupQ.Encode())
 
-		client := &http.Client{Timeout: 10 * time.Second}
+		warmupClient := &http.Client{Timeout: 10 * time.Second, Jar: jar}
 		req, _ := http.NewRequest("GET", warmupURL, nil)
 		req.Header.Set("User-Agent", UA)
 		req.Header.Set("Referer", getReferer(productID))
 		req.Header.Set("Accept", "application/json")
 		setWorkerSecret(req)
-		client.Do(req)
+		warmupClient.Do(req)
 
 		cacheMutex.Lock()
-		sessionCache[productID] = SessionEntry{SessionID: sessionID, CreatedAt: time.Now()}
+		sessionCache[productID] = SessionEntry{SessionID: sessionID, CreatedAt: time.Now(), Jar: jar}
 		cacheMutex.Unlock()
+	}
+
+	// Guard against sessions cached before the cookie jar was introduced
+	if jar == nil {
+		jar = &simpleCookieJar{}
 	}
 
 	proxyQ := url.Values{}
@@ -571,14 +615,14 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 	proxyQ.Set("sessionID", sessionID)
 	reqURL := proxyURL("https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?" + proxyQ.Encode())
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	downloadClient := &http.Client{Timeout: 15 * time.Second, Jar: jar}
 	req, _ := http.NewRequest("GET", reqURL, nil)
 	req.Header.Set("User-Agent", UA)
 	req.Header.Set("Referer", getReferer(productID))
 	req.Header.Set("Accept", "application/json")
 	setWorkerSecret(req)
 
-	resp, err := client.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

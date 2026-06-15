@@ -32,23 +32,34 @@ export default {
     url.protocol = "https:";
     url.port = "";
 
+    const forwardHeaders = {
+      "User-Agent": request.headers.get("User-Agent") || "Mozilla/5.0",
+      "Referer": request.headers.get("Referer") || "",
+      "Accept": request.headers.get("Accept") || "application/json",
+    };
+    const cookie = request.headers.get("Cookie");
+    if (cookie) forwardHeaders["Cookie"] = cookie;
+
     const upstreamRequest = new Request(url.toString(), {
       method: request.method,
-      headers: {
-        "User-Agent": request.headers.get("User-Agent") || "Mozilla/5.0",
-        "Referer": request.headers.get("Referer") || "",
-        "Accept": request.headers.get("Accept") || "application/json",
-      },
+      headers: forwardHeaders,
     });
 
     const upstream = await fetch(upstreamRequest);
 
+    const responseHeaders = new Headers();
+    responseHeaders.set("Content-Type", upstream.headers.get("Content-Type") || "application/json");
+    responseHeaders.set("Access-Control-Allow-Origin", "*");
+
+    // Forward Set-Cookie headers so the backend's cookie jar can accumulate them
+    const setCookies = upstream.headers.getAll
+      ? upstream.headers.getAll("set-cookie")
+      : (upstream.headers.get("set-cookie") ? [upstream.headers.get("set-cookie")] : []);
+    for (const c of setCookies) responseHeaders.append("Set-Cookie", c);
+
     return new Response(upstream.body, {
       status: upstream.status,
-      headers: {
-        "Content-Type": upstream.headers.get("Content-Type") || "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: responseHeaders,
     });
   },
 };
