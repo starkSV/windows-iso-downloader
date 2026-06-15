@@ -606,6 +606,11 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 		jar = &simpleCookieJar{}
 	}
 
+	jar.mu.Lock()
+	cookieCount := len(jar.cookies)
+	jar.mu.Unlock()
+	log.Printf("MS fetch /proxy: session %s has %d cookies in jar\n", sessionID[:8], cookieCount)
+
 	proxyQ := url.Values{}
 	proxyQ.Set("profile", PROFILE)
 	proxyQ.Set("productEditionId", "undefined")
