@@ -152,12 +152,26 @@ func runEval(slug string) error {
 		return fmt.Errorf("no eval links returned for %s", ep.Slug)
 	}
 
-	for _, link := range links {
-		if link.Arch != "" {
-			fmt.Printf("%s\t%s\n", link.Arch, link.URL)
-		} else {
-			fmt.Println(link.URL)
-		}
+	if len(links) == 1 {
+		fmt.Println(links[0].URL)
+		return nil
 	}
+
+	fmt.Fprintln(os.Stderr, "\nSelect a download:")
+	for i, link := range links {
+		label := link.Lang
+		if link.Arch != "" && link.Lang != "" {
+			label = fmt.Sprintf("%-6s %s", link.Lang, link.Arch)
+		} else if link.Arch != "" {
+			label = link.Arch
+		}
+		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, label)
+	}
+	fmt.Fprint(os.Stderr, "\nChoice: ")
+	n, err := parseChoice(os.Stdin, len(links))
+	if err != nil {
+		return err
+	}
+	fmt.Println(links[n-1].URL)
 	return nil
 }
