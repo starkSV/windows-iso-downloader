@@ -13,6 +13,9 @@ import (
 func parseChoice(r io.Reader, max int) (int, error) {
 	scanner := bufio.NewScanner(r)
 	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return 0, fmt.Errorf("reading input: %w", err)
+		}
 		return 0, fmt.Errorf("no input")
 	}
 	text := strings.TrimSpace(scanner.Text())
@@ -27,6 +30,9 @@ func parseChoice(r io.Reader, max int) (int, error) {
 }
 
 func pickProduct(products []Product) (Product, error) {
+	if len(products) == 0 {
+		return Product{}, fmt.Errorf("no products available")
+	}
 	fmt.Fprintln(os.Stderr, "\nSelect a product:")
 	for i, p := range products {
 		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, p.Name)
@@ -40,6 +46,9 @@ func pickProduct(products []Product) (Product, error) {
 }
 
 func pickLanguage(langs []Language) (Language, error) {
+	if len(langs) == 0 {
+		return Language{}, fmt.Errorf("no languages available")
+	}
 	fmt.Fprintln(os.Stderr, "\nSelect a language:")
 	for i, l := range langs {
 		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, l.Language)
@@ -53,6 +62,9 @@ func pickLanguage(langs []Language) (Language, error) {
 }
 
 func pickEvalProduct(products []EvalProduct) (EvalProduct, error) {
+	if len(products) == 0 {
+		return EvalProduct{}, fmt.Errorf("no eval products available")
+	}
 	fmt.Fprintln(os.Stderr, "\nSelect an evaluation product:")
 	for i, p := range products {
 		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, p.Name)
