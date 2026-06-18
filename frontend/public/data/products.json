@@ -1,15 +1,4 @@
 {
-    "48": {
-        "name": "Windows 8.1 Single Language (9600.17415)",
-        "badge": "LEGACY",
-        "archs": [
-            "x64",
-            "x86"
-        ],
-        "related": [
-            "52"
-        ]
-    },
     "52": {
         "name": "Windows 8.1 (9600.17415)",
         "badge": "LEGACY",
@@ -18,7 +7,6 @@
             "x86"
         ],
         "related": [
-            "48",
             "2618"
         ]
     },

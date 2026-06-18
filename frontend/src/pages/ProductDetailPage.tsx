@@ -8,6 +8,7 @@ import type { Sku, DownloadOption } from '../types'
 import SystemRequirements from '../components/SystemRequirements'
 import CliCommand from '../components/CliCommand'
 import RelatedReleases from '../components/RelatedReleases'
+import OfficialFallback from '../components/OfficialFallback'
 import { addRecentEntry, updateRecentExpiry } from '../components/RecentlyViewed'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
@@ -61,6 +62,7 @@ export default function ProductDetailPage() {
   const [, setLinkExpiry] = useState<Date | null>(null)
   const [expiryRemaining, setExpiryRemaining] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [linkStatus, setLinkStatus] = useState<'fresh' | 'cached' | 'stale' | null>(null)
   const expiryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: false })
@@ -195,26 +197,36 @@ export default function ProductDetailPage() {
     setDownloadLinks([])
     setLinkExpiry(null)
     setExpiryRemaining(null)
+    setLinkStatus(null)
     if (expiryTimerRef.current) clearInterval(expiryTimerRef.current)
 
-    fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error)
-        if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
-        setDownloadLinks(data.ProductDownloadOptions)
-        const expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
-        setLinkExpiry(expiry)
-        if (expiry) {
-          startExpiryCountdown(expiry)
-          if (productId) updateRecentExpiry(productId, expiry.getTime())
-        }
-      })
-      .catch(e => {
-        setError(e.message)
-        toast.error(e.message)
-      })
-      .finally(() => setIsFetching(false))
+    try {
+      const r = await fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}`)
+      const status = r.headers.get('X-MSDL-Link-Status') as 'fresh' | 'cached' | 'stale' | null
+      const expiresHeader = r.headers.get('X-MSDL-Link-Expires')
+      const data = await r.json()
+      if (data.error) throw new Error(data.error)
+      if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
+      setDownloadLinks(data.ProductDownloadOptions)
+      setLinkStatus(status)
+      let expiry: Date | null = null
+      if (expiresHeader) {
+        const d = new Date(expiresHeader)
+        if (!isNaN(d.getTime())) expiry = d
+      }
+      if (!expiry) expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
+      setLinkExpiry(expiry)
+      if (expiry) {
+        startExpiryCountdown(expiry)
+        if (productId) updateRecentExpiry(productId, expiry.getTime())
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to fetch links'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setIsFetching(false)
+    }
   }
 
   function handleCopy(uri: string) {
@@ -256,11 +268,19 @@ export default function ProductDetailPage() {
     setError(null)
     try {
       const r = await fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}&force=true`)
+      const status = r.headers.get('X-MSDL-Link-Status') as 'fresh' | 'cached' | 'stale' | null
+      const expiresHeader = r.headers.get('X-MSDL-Link-Expires')
       const data = await r.json()
       if (data.error) throw new Error(data.error)
       if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
       setDownloadLinks(data.ProductDownloadOptions)
-      const expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
+      setLinkStatus(status)
+      let expiry: Date | null = null
+      if (expiresHeader) {
+        const d = new Date(expiresHeader)
+        if (!isNaN(d.getTime())) expiry = d
+      }
+      if (!expiry) expiry = parseSeExpiry(data.ProductDownloadOptions[0].Uri)
       setLinkExpiry(expiry)
       if (expiry) {
         startExpiryCountdown(expiry)
@@ -439,6 +459,7 @@ export default function ProductDetailPage() {
                       if (sku) setSelectedSku(sku)
                       setDownloadLinks([])
                       setError(null)
+                      setLinkStatus(null)
                     }}
                   >
                     <Select.Trigger className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 border border-white/7 text-sm text-white hover:bg-white/7 hover:border-white/12 focus:outline-none transition-all cursor-pointer">
@@ -523,6 +544,16 @@ export default function ProductDetailPage() {
                   transition={{ type: 'spring', stiffness: 300, damping: 28 }}
                 >
                   <div className="pt-4 border-t border-white/6 space-y-3">
+                    {/* Stale warning */}
+                    {linkStatus === 'stale' && (
+                      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-amber-400">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                        <p className="text-[12px] leading-relaxed">
+                          This link is cached and may have expired — Microsoft is currently limiting automated requests. Use the options below for a guaranteed fresh download.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Expiry row */}
                     <div className="flex items-center justify-between gap-2">
                       <div className={`flex items-center gap-2 p-3 rounded-lg border text-[11px] flex-1 ${
@@ -606,6 +637,14 @@ export default function ProductDetailPage() {
 
           {(!isNotFound && !hasCatalogError) && (
             <>
+              {/* Official fallback — shown when backend is WAF-blocked (stale) */}
+              {meta.active && linkStatus === 'stale' && selectedSku && (
+                <OfficialFallback
+                  productId={productId!}
+                  languageName={selectedSku.LocalizedLanguage}
+                />
+              )}
+
               {/* System requirements */}
               <SystemRequirements isWin11={isWin11(productId!)} />
 
