@@ -1274,13 +1274,22 @@ func handleContribute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validation 3: expiry must be > 1 hour out
-	expiresAt := parseLinkExpiry(raw)
-	if time.Until(expiresAt) < time.Hour {
-		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (expiry < 1h)\n", productID, skuID)
+	// Validation 3: expiry must be > 1 hour out.
+	// Use extractRawExpiry (direct se timestamp) — NOT parseLinkExpiry, which has
+	// a 1h safety floor that would accept already-expired URLs.
+	seStr := extractRawExpiry(raw)
+	if seStr == "" {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no valid se param)\n", productID, skuID)
+		respondJSONError(w, http.StatusUnprocessableEntity, "no valid signed expiry found in download URL")
+		return
+	}
+	seTime, _ := time.Parse(time.RFC3339, seStr)
+	if time.Until(seTime) < time.Hour {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (expiry < 1h: %s)\n", productID, skuID, seStr)
 		respondJSONError(w, http.StatusUnprocessableEntity, "link expires in less than 1 hour")
 		return
 	}
+	expiresAt := parseLinkExpiry(raw) // cache TTL (se minus 30m buffer + jitter)
 
 	// Validation 4: all download URLs must be from allowed Microsoft CDN hosts
 	var data map[string]interface{}
