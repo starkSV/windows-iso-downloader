@@ -67,10 +67,14 @@ jobs:
             ```
 
       - name: Submit winget update
-        if: success() && secrets.WINGET_TOKEN != ''
+        if: success()
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
+          if [ -z "$WINGET_TOKEN" ]; then
+            echo "WINGET_TOKEN not set, skipping winget update"
+            exit 0
+          fi
           dotnet tool install --global wingetcreate
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#cli/v}"
