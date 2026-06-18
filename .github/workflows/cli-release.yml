@@ -1,0 +1,85 @@
+name: CLI Release
+
+on:
+  push:
+    tags:
+      - 'cli/v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build binaries
+        working-directory: cli
+        run: |
+          mkdir -p ../dist
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-linux-amd64   .
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-darwin-amd64  .
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/msdl-darwin-arm64  .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-windows-amd64.exe .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "msdl CLI ${{ github.ref_name }}"
+          files: dist/*
+          body: |
+            ## Install
+
+            **Windows (winget):**
+            ```
+            winget install starkSV.msdl
+            ```
+
+            **Linux/macOS:**
+            ```bash
+            # Linux x86_64
+            curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-linux-amd64 -o msdl
+            chmod +x msdl && sudo mv msdl /usr/local/bin/
+
+            # macOS Apple Silicon
+            curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-darwin-arm64 -o msdl
+            chmod +x msdl && sudo mv msdl /usr/local/bin/
+
+            # macOS Intel
+            curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-darwin-amd64 -o msdl
+            chmod +x msdl && sudo mv msdl /usr/local/bin/
+            ```
+
+            **Windows (manual):** Download `msdl-windows-amd64.exe`, rename to `msdl.exe`, place in a directory on your PATH.
+
+            ## Usage
+            ```
+            msdl                                              # fully interactive
+            msdl "windows 11 25h2"                            # filter products, pick language
+            msdl --id 3262 --lang "English (United States)"  # direct, no prompts
+            msdl --eval server-2025                          # evaluation ISOs
+            msdl --list                                       # list all products
+            ```
+
+      - name: Submit winget update
+        if: success()
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -z "$WINGET_TOKEN" ]; then
+            echo "WINGET_TOKEN not set, skipping winget update"
+            exit 0
+          fi
+          dotnet tool install --global wingetcreate
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#cli/v}"
+          wingetcreate update starkSV.msdl \
+            --version "$VERSION" \
+            --urls "https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-windows-amd64.exe" \
+            --submit \
+            --token "$WINGET_TOKEN"
