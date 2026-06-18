@@ -245,6 +245,40 @@ func parseLinkExpiry(rawJSON []byte) time.Time {
 	return time.Now().Add(jitter(ttl, 5*time.Minute))
 }
 
+// extractRawExpiry returns the raw `se` signed-expiry query param from the
+// first URL in a GetProductDownloadLinksBySku response (RFC3339 string).
+// Returns "" if absent, unparseable, or not present in the JSON.
+func extractRawExpiry(rawJSON []byte) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal(rawJSON, &data); err != nil {
+		return ""
+	}
+	opts, ok := data["ProductDownloadOptions"].([]interface{})
+	if !ok || len(opts) == 0 {
+		return ""
+	}
+	first, ok := opts[0].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	uri, ok := first["Uri"].(string)
+	if !ok {
+		return ""
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+	se := u.Query().Get("se")
+	if se == "" {
+		return ""
+	}
+	if _, err := time.Parse(time.RFC3339, se); err != nil {
+		return ""
+	}
+	return se
+}
+
 // rateLimitError marks a Microsoft rate-limit response so callers can choose
 // to serve stale data instead of propagating the error.
 type rateLimitError struct{ message string }
@@ -713,6 +747,7 @@ func enableCORS(next http.Handler) http.Handler {
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Expose-Headers", "X-MSDL-Link-Status, X-MSDL-Link-Expires")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -845,6 +880,10 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	if !forceRefresh && hasCached && time.Now().Before(cached.ExpiresAt) {
 		atomic.AddInt64(&mLinkCacheHits, 1)
 		log.Printf("/proxy: product_id=%s sku_id=%s -> cache hit\n", productID, skuID)
+		w.Header().Set("X-MSDL-Link-Status", "cached")
+		if exp := extractRawExpiry(cached.RawJSON); exp != "" {
+			w.Header().Set("X-MSDL-Link-Expires", exp)
+		}
 		w.Write(cached.RawJSON)
 		return
 	}
@@ -894,6 +933,10 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 					return nil, nil
 				})
 			}()
+			w.Header().Set("X-MSDL-Link-Status", "stale")
+			if exp := extractRawExpiry(cached.RawJSON); exp != "" {
+				w.Header().Set("X-MSDL-Link-Expires", exp)
+			}
 			w.Write(cached.RawJSON)
 			return
 		}
@@ -932,6 +975,10 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		log.Printf("/proxy: product_id=%s sku_id=%s -> force refresh, cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
 	} else {
 		log.Printf("/proxy: product_id=%s sku_id=%s -> fetched and cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	}
+	w.Header().Set("X-MSDL-Link-Status", "fresh")
+	if exp := extractRawExpiry(raw); exp != "" {
+		w.Header().Set("X-MSDL-Link-Expires", exp)
 	}
 	w.Write(raw)
 }
