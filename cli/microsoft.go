@@ -266,7 +266,8 @@ func fetchLanguages(client *http.Client, sessionID, productID string) ([]Languag
 	return parseSkuInfo(raw)
 }
 
-func fetchDownloadLinks(client *http.Client, sessionID, productID, skuID string) ([]DownloadLink, error) {
+// fetchDownloadLinks returns parsed links and the raw Microsoft JSON (for cache contribution).
+func fetchDownloadLinks(client *http.Client, sessionID, productID, skuID string) ([]DownloadLink, []byte, error) {
 	wq := url.Values{}
 	wq.Set("profile", msProfile)
 	wq.Set("productEditionId", productID)
@@ -289,9 +290,13 @@ func fetchDownloadLinks(client *http.Client, sessionID, productID, skuID string)
 		"https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?"+q.Encode(),
 		productID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return parseDownloadLinks(raw)
+	links, err := parseDownloadLinks(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	return links, raw, nil
 }
 
 func extractFwlinks(pageHTML string) []string {

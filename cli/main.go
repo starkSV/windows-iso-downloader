@@ -1,11 +1,48 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
+
+// contributeURL is the MSDL backend endpoint that warms the shared link cache.
+// Override with MSDL_API_URL env var, e.g. export MSDL_API_URL=http://localhost:3002
+const contributeSecret = "msdl-contribute-2026"
+
+func contributeURL() string {
+	if u := os.Getenv("MSDL_API_URL"); u != "" {
+		return strings.TrimRight(u, "/") + "/contribute"
+	}
+	return "https://api.msdl.tech-latest.com/contribute"
+}
+
+func postContribute(productID, skuID string, rawJSON []byte) {
+	payload := struct {
+		ProductID string          `json:"product_id"`
+		SkuID     string          `json:"sku_id"`
+		RawJSON   json.RawMessage `json:"raw_json"`
+	}{ProductID: productID, SkuID: skuID, RawJSON: rawJSON}
+	body, _ := json.Marshal(payload)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, contributeURL(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Contribute-Secret", contributeSecret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -35,11 +72,13 @@ Flags:`)
 	langFlag := fs.String("lang", "", `language name, e.g. "English (United States)"`)
 	evalMode := fs.Bool("eval", false, "fetch evaluation ISOs")
 	listMode := fs.Bool("list", false, "list all products and exit")
+	noContributeFlag := fs.Bool("no-contribute", false, "skip sharing the link with the msdl.tech cache")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	query := strings.Join(fs.Args(), " ")
+	noContribute := *noContributeFlag || os.Getenv("MSDL_NO_CONTRIBUTE") == "1"
 
 	if *listMode {
 		fmt.Fprintln(os.Stderr, "Consumer products:")
@@ -56,10 +95,10 @@ Flags:`)
 	if *evalMode {
 		return runEval(query)
 	}
-	return runConsumer(*productID, query, *langFlag)
+	return runConsumer(*productID, query, *langFlag, noContribute)
 }
 
-func runConsumer(productID, query, langName string) error {
+func runConsumer(productID, query, langName string, noContribute bool) error {
 	var product Product
 
 	if productID != "" {
@@ -115,13 +154,34 @@ func runConsumer(productID, query, langName string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Fetching download link...\n")
-	links, err := fetchDownloadLinks(client, sessionID, product.ID, lang.ID)
+	links, rawJSON, err := fetchDownloadLinks(client, sessionID, product.ID, lang.ID)
 	if err != nil {
 		return fmt.Errorf("fetching download links: %w", err)
 	}
 
+	// Fire contribute in background before printing so the goroutine starts immediately.
+	var wg sync.WaitGroup
+	if !noContribute {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			postContribute(product.ID, lang.ID, rawJSON)
+		}()
+	}
+
 	for _, link := range links {
 		fmt.Println(link.URI)
+	}
+
+	if !noContribute {
+		fmt.Fprintln(os.Stderr, "Shared with msdl.tech cache to help other users (--no-contribute to opt out)")
+		// Wait up to 5s for the contribution to complete before process exit.
+		done := make(chan struct{})
+		go func() { wg.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
 	}
 	return nil
 }

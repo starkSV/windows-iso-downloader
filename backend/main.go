@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -130,6 +132,10 @@ var (
 // --- Singleflight (one in-flight Microsoft fetch per unique key) ---
 
 var sfGroup singleflight.Group
+
+// --- Redis L2 cache client ---
+
+var rdb *redis.Client
 
 // --- Metrics counters (atomic — no mutex needed) ---
 
@@ -284,6 +290,198 @@ func extractRawExpiry(rawJSON []byte) string {
 type rateLimitError struct{ message string }
 
 func (e *rateLimitError) Error() string { return e.message }
+
+// --- Redis L2 cache helpers ---
+
+func redisKey(productID, skuID string) string {
+	return "msdl:link:" + productID + ":" + skuID
+}
+
+func initRedis() {
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		log.Println("redis: REDIS_URL not set — memory-only mode")
+		return
+	}
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Printf("redis: invalid REDIS_URL: %v — memory-only mode\n", err)
+		return
+	}
+	client := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		log.Printf("redis: ping failed: %v — memory-only mode\n", err)
+		return
+	}
+	rdb = client
+	log.Println("redis: connected")
+}
+
+func redisWriteLink(productID, skuID string, raw []byte, expiresAt time.Time) {
+	if rdb == nil {
+		return
+	}
+	ttl := time.Until(expiresAt)
+	if ttl <= 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := rdb.Set(ctx, redisKey(productID, skuID), raw, ttl).Err(); err != nil {
+		log.Printf("redis: write failed for %s:%s: %v\n", productID, skuID, err)
+	}
+}
+
+func redisSeedLinkCache() {
+	if rdb == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var cursor uint64
+	var seeded int
+	for {
+		keys, nextCursor, err := rdb.Scan(ctx, cursor, "msdl:link:*", 100).Result()
+		if err != nil {
+			log.Printf("redis: seed scan error: %v\n", err)
+			return
+		}
+		for _, key := range keys {
+			raw, err := rdb.Get(ctx, key).Bytes()
+			if err != nil {
+				continue
+			}
+			ttl, err := rdb.TTL(ctx, key).Result()
+			if err != nil || ttl <= 0 {
+				continue
+			}
+			// Key format: "msdl:link:<productID>:<skuID>"
+			parts := strings.SplitN(strings.TrimPrefix(key, "msdl:link:"), ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			cacheKey := parts[0] + ":" + parts[1]
+			expiresAt := time.Now().Add(ttl)
+			linkCacheMu.Lock()
+			linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: expiresAt, FetchedAt: time.Now()}
+			linkCacheMu.Unlock()
+			seeded++
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+	if seeded > 0 {
+		log.Printf("redis: seeded %d link cache entries from Redis\n", seeded)
+	}
+}
+
+// --- /contribute validation helpers ---
+
+// validContributeProducts is the canonical product ID allow-list for POST /contribute.
+var validContributeProducts = map[string]bool{
+	"52": true, "2378": true, "2618": true,
+	"3113": true, "3114": true, "3115": true,
+	"3131": true, "3132": true, "3133": true,
+	"3262": true, "3263": true, "3264": true,
+	"3265": true, "3266": true, "3267": true,
+	"3321": true, "3324": true,
+}
+
+// allowedCDNSuffixes is the CDN host allow-list for contributed download URLs.
+// Worst-case abuse: attacker submits a valid Microsoft-signed link — harmless.
+var allowedCDNSuffixes = []string{
+	".download.prss.microsoft.com",
+	".dl.delivery.mp.microsoft.com",
+	".delivery.mp.microsoft.com",
+}
+
+func isAllowedCDNHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, suffix := range allowedCDNSuffixes {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// --- Per-IP rate limiter (token bucket, used by /contribute) ---
+
+type tokenBucket struct {
+	tokens     float64
+	maxTokens  float64
+	refillRate float64 // tokens per second
+	lastRefill time.Time
+}
+
+func (b *tokenBucket) allow() bool {
+	now := time.Now()
+	elapsed := now.Sub(b.lastRefill).Seconds()
+	b.tokens += elapsed * b.refillRate
+	if b.tokens > b.maxTokens {
+		b.tokens = b.maxTokens
+	}
+	b.lastRefill = now
+	if b.tokens >= 1 {
+		b.tokens--
+		return true
+	}
+	return false
+}
+
+type ipRateLimiter struct {
+	mu      sync.Mutex
+	buckets map[string]*tokenBucket
+	rate    float64
+	burst   float64
+}
+
+func newIPRateLimiter(ratePerMin, burst float64) *ipRateLimiter {
+	rl := &ipRateLimiter{
+		buckets: make(map[string]*tokenBucket),
+		rate:    ratePerMin / 60.0,
+		burst:   burst,
+	}
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		for range ticker.C {
+			rl.mu.Lock()
+			for ip, b := range rl.buckets {
+				if b.tokens >= b.maxTokens {
+					delete(rl.buckets, ip)
+				}
+			}
+			rl.mu.Unlock()
+		}
+	}()
+	return rl
+}
+
+func (rl *ipRateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	b, ok := rl.buckets[ip]
+	if !ok {
+		b = &tokenBucket{
+			tokens:     rl.burst,
+			maxTokens:  rl.burst,
+			refillRate: rl.rate,
+			lastRefill: time.Now(),
+		}
+		rl.buckets[ip] = b
+	}
+	return b.allow()
+}
+
+var contributeRL = newIPRateLimiter(5, 5) // 5 requests/min, burst of 5
 
 // --- Evalcenter helpers ---
 
@@ -745,7 +943,7 @@ func enableCORS(next http.Handler) http.Handler {
 		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.Header().Set("Access-Control-Expose-Headers", "X-MSDL-Link-Status, X-MSDL-Link-Expires")
 		if r.Method == "OPTIONS" {
@@ -888,6 +1086,29 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1b. Redis L2 cache — check after in-memory miss, before calling Microsoft
+	if !forceRefresh && !hasCached && rdb != nil {
+		rctx, rcancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		redisRaw, redisErr := rdb.Get(rctx, redisKey(productID, skuID)).Bytes()
+		rcancel()
+		if redisErr == nil && len(redisRaw) > 0 {
+			exp := parseLinkExpiry(redisRaw)
+			if time.Now().Before(exp) {
+				linkCacheMu.Lock()
+				linkCache[cacheKey] = linkCacheEntry{RawJSON: redisRaw, ExpiresAt: exp, FetchedAt: time.Now()}
+				linkCacheMu.Unlock()
+				atomic.AddInt64(&mLinkCacheHits, 1)
+				log.Printf("/proxy: product_id=%s sku_id=%s -> redis L2 hit\n", productID, skuID)
+				w.Header().Set("X-MSDL-Link-Status", "cached")
+				if rawExp := extractRawExpiry(redisRaw); rawExp != "" {
+					w.Header().Set("X-MSDL-Link-Expires", rawExp)
+				}
+				w.Write(redisRaw)
+				return
+			}
+		}
+	}
+
 	// 2. Check negative cache — but only if no stale data and not a force refresh
 	if !forceRefresh && !hasCached {
 		negCacheMu.RLock()
@@ -929,6 +1150,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 					linkCacheMu.Lock()
 					linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: exp, FetchedAt: time.Now()}
 					linkCacheMu.Unlock()
+					redisWriteLink(productID, skuID, raw, exp)
 					log.Printf("/proxy: background refresh succeeded for %s:%s, cached until %s\n", productID, skuID, exp.Format(time.RFC3339))
 					return nil, nil
 				})
@@ -969,6 +1191,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		FetchedAt: time.Now(),
 	}
 	linkCacheMu.Unlock()
+	redisWriteLink(productID, skuID, raw, expiresAt)
 
 	atomic.AddInt64(&mLinkFetches, 1)
 	if forceRefresh {
@@ -981,6 +1204,118 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-MSDL-Link-Expires", exp)
 	}
 	w.Write(raw)
+}
+
+// --- /contribute endpoint ---
+
+func handleContribute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check CONTRIBUTE_SECRET header
+	if secret := os.Getenv("CONTRIBUTE_SECRET"); secret != "" {
+		if r.Header.Get("X-Contribute-Secret") != secret {
+			respondJSONError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+	}
+
+	// Per-IP rate limit (~5/min)
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+	}
+	if !contributeRL.allow(ip) {
+		respondJSONError(w, http.StatusTooManyRequests, "rate limit exceeded")
+		return
+	}
+
+	// Parse body
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MB cap
+	if err != nil {
+		respondJSONError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+	var req struct {
+		ProductID string          `json:"product_id"`
+		SkuID     string          `json:"sku_id"`
+		RawJSON   json.RawMessage `json:"raw_json"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	productID := req.ProductID
+	skuID := req.SkuID
+
+	// Validation 1: product in catalog
+	if !validContributeProducts[productID] {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (unknown product)\n", productID, skuID)
+		respondJSONError(w, http.StatusUnprocessableEntity, "unknown product_id")
+		return
+	}
+
+	// Validation 2: sku_id format
+	if !validSkuID.MatchString(skuID) {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (invalid sku_id format)\n", productID, skuID)
+		respondJSONError(w, http.StatusUnprocessableEntity, "invalid sku_id")
+		return
+	}
+
+	raw := []byte(req.RawJSON)
+	if len(raw) == 0 {
+		respondJSONError(w, http.StatusBadRequest, "raw_json is required")
+		return
+	}
+
+	// Validation 3: expiry must be > 1 hour out
+	expiresAt := parseLinkExpiry(raw)
+	if time.Until(expiresAt) < time.Hour {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (expiry < 1h)\n", productID, skuID)
+		respondJSONError(w, http.StatusUnprocessableEntity, "link expires in less than 1 hour")
+		return
+	}
+
+	// Validation 4: all download URLs must be from allowed Microsoft CDN hosts
+	var data map[string]interface{}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		respondJSONError(w, http.StatusUnprocessableEntity, "raw_json is not valid JSON")
+		return
+	}
+	opts, _ := data["ProductDownloadOptions"].([]interface{})
+	if len(opts) == 0 {
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no ProductDownloadOptions)\n", productID, skuID)
+		respondJSONError(w, http.StatusUnprocessableEntity, "raw_json has no ProductDownloadOptions")
+		return
+	}
+	for _, opt := range opts {
+		m, ok := opt.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		uri, _ := m["Uri"].(string)
+		if uri == "" || !isAllowedCDNHost(uri) {
+			log.Printf("contribute: product_id=%s sku_id=%s -> rejected (disallowed host: %s)\n", productID, skuID, uri)
+			respondJSONError(w, http.StatusUnprocessableEntity, "download URL host not in allow-list")
+			return
+		}
+	}
+
+	// Write to in-memory cache + Redis
+	cacheKey := productID + ":" + skuID
+	linkCacheMu.Lock()
+	linkCache[cacheKey] = linkCacheEntry{RawJSON: raw, ExpiresAt: expiresAt, FetchedAt: time.Now()}
+	linkCacheMu.Unlock()
+	redisWriteLink(productID, skuID, raw, expiresAt)
+
+	log.Printf("contribute: product_id=%s sku_id=%s -> accepted, cached until %s\n", productID, skuID, expiresAt.Format(time.RFC3339))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- /evallinks endpoint ---
@@ -1185,6 +1520,8 @@ func warmEvalCache() {
 }
 
 func main() {
+	initRedis()
+	go redisSeedLinkCache()
 	go cleanupSessions()
 	go cleanupCaches()
 	go warmEvalCache()
@@ -1193,6 +1530,7 @@ func main() {
 
 	mux.HandleFunc("/skuinfo", handleSkuInfo)
 	mux.HandleFunc("/proxy", handleProxy)
+	mux.HandleFunc("/contribute", handleContribute)
 	mux.HandleFunc("/evallinks", handleEvalLinks)
 	mux.HandleFunc("/metrics", handleMetrics)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
