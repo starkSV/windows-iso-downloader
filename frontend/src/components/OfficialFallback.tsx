@@ -21,10 +21,18 @@ function editionLabel(productId: string): string {
   return 'Windows 8.1'
 }
 
+function guideUrl(productId: string): string | null {
+  const id = Number(productId)
+  if (id >= 3113) return 'https://tech-latest.com/download-latest-windows-11-iso/#Method_3_From_the_Microsoft_Downloads_Page'
+  if (id >= 2378) return 'https://tech-latest.com/download-latest-windows-10-iso/#Method_31_From_Microsoft_Download_Page_Via_Windows_PC'
+  return null
+}
+
 export default function OfficialFallback({ productId, languageName }: Props) {
   const [open, setOpen] = useState(false)
   const url = officialUrl(productId)
   const edition = editionLabel(productId)
+  const guide = guideUrl(productId)
 
   return (
     <div className="mt-3">
@@ -88,6 +96,19 @@ export default function OfficialFallback({ productId, languageName }: Props) {
                   <span className="text-[12px] text-zinc-400">Click the download link for your architecture</span>
                 </li>
               </ol>
+              {guide && (
+                <p className="text-[11px] text-zinc-600 pt-1 border-t border-white/5">
+                  Need a visual walkthrough?{' '}
+                  <a
+                    href={guide}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+                  >
+                    See our step-by-step guide →
+                  </a>
+                </p>
+              )}
             </div>
           </motion.div>
         )}
