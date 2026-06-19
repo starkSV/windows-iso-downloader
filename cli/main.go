@@ -17,6 +17,18 @@ import (
 // Override with MSDL_API_URL env var, e.g. export MSDL_API_URL=http://localhost:3002
 const contributeSecret = "msdl-contribute-2026"
 
+// urlFilename extracts the bare filename from a URL (strips query string and path).
+func urlFilename(rawURL string) string {
+	s := rawURL
+	if i := strings.LastIndex(s, "?"); i > 0 {
+		s = s[:i]
+	}
+	if i := strings.LastIndex(s, "/"); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
 func contributeURL() string {
 	if u := os.Getenv("MSDL_API_URL"); u != "" {
 		return strings.TrimRight(u, "/") + "/contribute"
@@ -169,12 +181,19 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 		}()
 	}
 
+	fmt.Fprintln(os.Stderr, "")
 	for _, link := range links {
-		fmt.Println(link.URI)
+		name := urlFilename(link.URI)
+		fmt.Fprintf(os.Stderr, "  %s\n", name)
+		fmt.Fprintf(os.Stderr, "  %s\n", strings.Repeat("─", len(name)))
+		fmt.Println(link.URI) // stdout — stays clean for piping
+		fmt.Fprintln(os.Stderr, "")
 	}
 
 	if !noContribute {
-		fmt.Fprintln(os.Stderr, "Shared with msdl.tech cache to help other users (--no-contribute to opt out)")
+		fmt.Fprintln(os.Stderr, "  ✓ Shared with MSDL Web App (https://msdl.tech-latest.com/)")
+		fmt.Fprintln(os.Stderr, "    Opt out: --no-contribute")
+		fmt.Fprintln(os.Stderr, "")
 		// Wait up to 5s for the contribution to complete before process exit.
 		done := make(chan struct{})
 		go func() { wg.Wait(); close(done) }()
