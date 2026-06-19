@@ -9,6 +9,7 @@ import SystemRequirements from '../components/SystemRequirements'
 import CliCommand from '../components/CliCommand'
 import RelatedReleases from '../components/RelatedReleases'
 import OfficialFallback from '../components/OfficialFallback'
+import CliHandoff from '../components/CliHandoff'
 import { addRecentEntry, updateRecentExpiry } from '../components/RecentlyViewed'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
@@ -526,10 +527,21 @@ export default function ProductDetailPage() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="flex items-start gap-3 p-4 rounded-xl bg-red-500/8 border border-red-500/15 text-red-400 text-sm"
+                  className="space-y-3"
                 >
-                  <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                  <span>{error}</span>
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/8 border border-red-500/15 text-red-400 text-sm">
+                    <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                  {selectedSku && (
+                    <CliHandoff
+                      productId={productId!}
+                      langName={selectedSku.Language}
+                      langDisplay={selectedSku.LocalizedLanguage}
+                      highlight
+                      defaultOpen
+                    />
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -637,12 +649,26 @@ export default function ProductDetailPage() {
 
           {(!isNotFound && !hasCatalogError) && (
             <>
-              {/* Official fallback — shown when backend is WAF-blocked (stale) */}
-              {meta.active && linkStatus === 'stale' && selectedSku && (
-                <OfficialFallback
-                  productId={productId!}
-                  languageName={selectedSku.LocalizedLanguage}
-                />
+              {/* Fallbacks — shown when stale or any error */}
+              {meta.active && (linkStatus === 'stale' || error !== null) && (
+                <>
+                  <OfficialFallback
+                    productId={productId!}
+                    languageName={selectedSku?.LocalizedLanguage ?? ''}
+                  />
+                  {/* Collapsed CLI only when the highlighted card isn't already shown inside */}
+                  {!(error !== null && languages.length > 0) && (
+                    selectedSku ? (
+                      <CliHandoff
+                        productId={productId!}
+                        langName={selectedSku.Language}
+                        langDisplay={selectedSku.LocalizedLanguage}
+                      />
+                    ) : (
+                      <CliHandoff productId={productId!} />
+                    )
+                  )}
+                </>
               )}
 
               {/* System requirements */}
