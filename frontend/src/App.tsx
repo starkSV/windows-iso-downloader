@@ -10,6 +10,7 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import DisclaimerPage from './pages/DisclaimerPage'
 import EvalPage from './pages/EvalPage'
 import EvalDetailPage from './pages/EvalDetailPage'
+import CliPage from './pages/CliPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { evalSlugSet } from './data/evalProducts'
 import { useParams } from 'react-router-dom'
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/product/:productId" element={<ProductRouter />} />
           <Route path="/eval" element={<EvalPage />} />
+          <Route path="/cli" element={<CliPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/disclaimer" element={<DisclaimerPage />} />

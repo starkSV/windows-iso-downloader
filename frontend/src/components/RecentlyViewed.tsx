@@ -97,6 +97,11 @@ export default function RecentlyViewed() {
 
   if (entries.length === 0) return null
 
+  function handleClear() {
+    localStorage.removeItem(STORAGE_KEY)
+    setEntries([])
+  }
+
   return (
     <div className="mb-8">
       <div className="flex items-center gap-2 mb-3">
@@ -104,6 +109,12 @@ export default function RecentlyViewed() {
         <span className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-600">
           Recently viewed
         </span>
+        <button
+          onClick={handleClear}
+          className="ml-auto text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors"
+        >
+          Clear
+        </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {entries.map(entry => (

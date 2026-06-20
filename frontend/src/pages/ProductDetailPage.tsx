@@ -649,14 +649,14 @@ export default function ProductDetailPage() {
 
           {(!isNotFound && !hasCatalogError) && (
             <>
-              {/* Fallbacks — shown when stale or any error */}
+              {/* Fallbacks — only on stale or error */}
               {meta.active && (linkStatus === 'stale' || error !== null) && (
                 <>
                   <OfficialFallback
                     productId={productId!}
                     languageName={selectedSku?.LocalizedLanguage ?? ''}
                   />
-                  {/* Collapsed CLI only when the highlighted card isn't already shown inside */}
+                  {/* Collapsed CLI only when highlighted card isn't already shown inside the card */}
                   {!(error !== null && languages.length > 0) && (
                     selectedSku ? (
                       <CliHandoff
