@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Home, LayoutGrid, Info, ExternalLink, Shield } from 'lucide-react'
+import { Home, LayoutGrid, Info, ExternalLink, Shield, Terminal } from 'lucide-react'
 
 interface DockItem {
   label: string
@@ -13,6 +13,7 @@ interface DockItem {
 const items: DockItem[] = [
   { label: 'Home',       icon: <Home size={19} />,        path: '/' },
   { label: 'Products',   icon: <LayoutGrid size={19} />,  path: '/products' },
+  { label: 'CLI',        icon: <Terminal size={19} />,    path: '/cli' },
   { label: 'About',      icon: <Info size={19} />,        path: '/about' },
   { label: 'Privacy',    icon: <Shield size={19} />,      path: '/privacy-policy' },
   { label: 'TechLatest', icon: <ExternalLink size={19} />, href: 'https://tech-latest.com' },

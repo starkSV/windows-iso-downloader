@@ -940,7 +940,7 @@ func cleanupSessions() {
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") {
+		if origin == "https://msdl.tech-latest.com" || strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://100.") || strings.HasPrefix(origin, "http://192.168.") {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

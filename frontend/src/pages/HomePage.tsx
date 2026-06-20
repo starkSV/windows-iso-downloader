@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { ArrowRight, Server } from 'lucide-react'
+import { ArrowRight, Server, Terminal } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
 import StatsBar from '../components/StatsBar'
 import HowItWorks from '../components/HowItWorks'
@@ -206,6 +206,33 @@ export default function HomePage() {
           >
             Browse all {totalReleases} releases
             <ArrowRight size={14} />
+          </Link>
+        </motion.div>
+
+        {/* CLI promo */}
+        <motion.div
+          className="mt-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.55 }}
+        >
+          <Link
+            to="/cli"
+            className="group block px-4 py-3 rounded-xl border border-white/6 bg-[#0d0d0f] hover:border-emerald-500/20 hover:bg-[#0a0f0b] transition-all duration-200"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Terminal size={11} className="text-emerald-500/50" />
+                <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">CLI tool</span>
+              </div>
+              <span className="flex items-center gap-1 text-[11px] text-zinc-600 group-hover:text-emerald-400 transition-colors">
+                Learn more
+                <ArrowRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+              </span>
+            </div>
+            <code className="text-[13px] font-mono text-zinc-300">
+              <span className="text-zinc-600">$ </span>msdl --id 3262 --lang &quot;English&quot;
+            </code>
           </Link>
         </motion.div>
 
