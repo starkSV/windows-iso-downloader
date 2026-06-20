@@ -34,12 +34,59 @@ MSDL replicates the session flow that Microsoft uses to serve ISO download links
 
 ---
 
+## CLI Tool
+
+`msdl` is a standalone command-line tool that fetches Windows ISO links directly from your machine — no browser, no server in the middle.
+
+```bash
+# Interactive — pick product and language
+msdl
+
+# Direct with flags
+msdl --id 3262 --lang "English"
+
+# Evaluation / Server ISOs
+msdl --eval server-2025
+
+# Pipe directly into a downloader
+msdl --id 3262 --lang "English" | wget -i -
+msdl --id 3262 --lang "English" | xargs aria2c -x 16 -s 16
+
+# List all available products
+msdl --list
+```
+
+### Install
+
+Download the latest binary from [GitHub Releases](https://github.com/starkSV/windows-iso-downloader/releases/latest) and rename it:
+
+| Platform | File | Rename to |
+|---|---|---|
+| Windows | `msdl-windows-amd64.exe` | `msdl.exe` |
+| macOS (Apple Silicon) | `msdl-darwin-arm64` | `msdl` |
+| macOS (Intel) | `msdl-darwin-amd64` | `msdl` |
+| Linux | `msdl-linux-amd64` | `msdl` |
+
+winget support is in progress: `winget install starkSV.msdl` (pending package review).
+
+### Crowdsourced cache
+
+By default, each successful fetch is contributed back to the web app's cache — so the next visitor gets a cached link instead of hitting Microsoft cold. Contribution is a background POST to `/contribute`. No personal data is sent — only the product ID, SKU ID, and the raw Microsoft JSON response. To opt out:
+
+```bash
+msdl --id 3262 --lang "English" --no-contribute
+# or: MSDL_NO_CONTRIBUTE=1
+```
+
+---
+
 ## Project Structure
 
 ```
 windows-iso-downloader/
 ├── frontend/            # React 19 + TypeScript + Vite + Tailwind v4
 ├── backend/             # Go proxy server (recommended for production)
+├── cli/                 # Go CLI — direct ISO fetching from user's machine
 ├── cloudflare-worker/   # Optional CF Worker for distributed IP routing
 └── README.md
 ```
@@ -82,7 +129,7 @@ Additional resilience mechanisms:
 - **Jitter** — ±5 min random offset on TTLs prevents synchronized mass-expiry spikes.
 - **Cache eviction** — a background goroutine evicts expired entries every 30 minutes.
 
-All caches are in-memory only and reset on restart. Monitor them via the [`/metrics` endpoint](#get-metricssecret).
+All caches are in-memory and reset on restart. If `REDIS_URL` is set, a Redis/Valkey L2 cache supplements the in-memory layer: on startup the in-memory cache is seeded from Redis (restart-safe), and every fresh Microsoft fetch is written through to Redis. If Redis is unavailable the backend falls back to memory-only mode silently. Monitor the cache via the [`/metrics` endpoint](#get-metricssecret).
 
 ---
 
@@ -173,6 +220,20 @@ Valid slugs: `server-2025`, `server-2022`, `server-2019`, `server-2016`, `win11-
 }
 ```
 
+### `POST /contribute`
+
+Accepts a crowdsourced link from the CLI tool to warm the cache. Requires `Authorization: Bearer <CONTRIBUTE_SECRET>` header.
+
+```json
+{
+  "product_id": "3262",
+  "sku_id": "0x0409",
+  "response": { /* raw Microsoft JSON */ }
+}
+```
+
+Returns `200 OK` on acceptance, `400` on validation failure (expired link, unknown product), `429` on rate limit (~5 req/min per IP).
+
 ### `GET /metrics?secret=<secret>`
 
 Returns real-time cache statistics for the running instance. Auth via `?secret=` query param or `Authorization: Bearer <secret>` header. Requires `METRICS_SECRET` env var to be set.
@@ -241,10 +302,20 @@ Returns real-time cache statistics for the running instance. Auth via `?secret=`
 |---|---|
 | Language | Go 1.25+ |
 | HTTP | `net/http` (stdlib, no framework) |
-| Caching | 4-layer in-memory · `sync.RWMutex` · dynamic TTL |
+| Caching | 4-layer in-memory · `sync.RWMutex` · dynamic TTL · Redis/Valkey L2 |
 | Concurrency | `golang.org/x/sync/singleflight` |
 | UUID | `github.com/google/uuid` |
 | MDT parsing | `regexp` (stdlib) |
+| Redis client | `github.com/redis/go-redis/v9` |
+
+### CLI (`cli/`)
+
+| | |
+|---|---|
+| Language | Go 1.25+ |
+| Interactive UI | `github.com/charmbracelet/huh` |
+| HTTP | `net/http` (stdlib) |
+| Releases | GitHub Actions · cross-compiled for Windows / macOS / Linux |
 
 ---
 
