@@ -1559,13 +1559,14 @@ func handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 		rdb.HIncrBy(ctx, "msdl:telemetry:actions", p.Action, 1)
-		if p.Platform != "" {
+		validPlatforms := map[string]bool{"windows": true, "darwin": true, "linux": true}
+		if validPlatforms[p.Platform] {
 			rdb.HIncrBy(ctx, "msdl:telemetry:platforms", p.Platform, 1)
 		}
-		if p.Version != "" {
+		if p.Version != "" && len(p.Version) <= 20 {
 			rdb.HIncrBy(ctx, "msdl:telemetry:versions", p.Version, 1)
 		}
-		if p.ProductID != "" {
+		if p.ProductID != "" && len(p.ProductID) <= 10 {
 			rdb.HIncrBy(ctx, "msdl:telemetry:products", p.ProductID, 1)
 		}
 		result := "success"
@@ -1582,6 +1583,10 @@ func handleTelemetry(w http.ResponseWriter, r *http.Request) {
 // --- /cli/version endpoint ---
 
 func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"latest": latestCLIVersion})
 }
