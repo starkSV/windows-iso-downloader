@@ -1263,11 +1263,11 @@ func handleContribute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validation 3: expiry must be > 1 hour out.
-	// Use extractRawExpiry (direct se timestamp) — NOT parseLinkExpiry, which has
+	// Use extractRawExpiry (direct expiry timestamp) — NOT parseLinkExpiry, which has
 	// a 1h safety floor that would accept already-expired URLs.
 	seStr := extractRawExpiry(raw)
 	if seStr == "" {
-		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no valid se param)\n", productID, skuID)
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no valid expiry param)\n", productID, skuID)
 		respondJSONError(w, http.StatusUnprocessableEntity, "no valid signed expiry found in download URL")
 		return
 	}
