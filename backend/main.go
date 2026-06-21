@@ -207,40 +207,19 @@ func jitter(base, maxJ time.Duration) time.Duration {
 	return base + offset
 }
 
-// parseLinkExpiry reads the `se` (signed expiry) query param from the first
+// parseLinkExpiry reads the expiration parameter (se or P1) from the first
 // download URL in a Microsoft GetProductDownloadLinksBySku response and returns
-// a cache expiry time of (se - now) - 30min, with ±5min jitter.
+// a cache expiry time of (expiration - now) - 30min, with ±5min jitter.
 // Falls back to 22h on any parse failure.
 func parseLinkExpiry(rawJSON []byte) time.Time {
 	fallback := func() time.Time {
 		return time.Now().Add(jitter(22*time.Hour, 5*time.Minute))
 	}
-
-	var data map[string]interface{}
-	if err := json.Unmarshal(rawJSON, &data); err != nil {
+	expStr := extractRawExpiry(rawJSON)
+	if expStr == "" {
 		return fallback()
 	}
-	opts, ok := data["ProductDownloadOptions"].([]interface{})
-	if !ok || len(opts) == 0 {
-		return fallback()
-	}
-	first, ok := opts[0].(map[string]interface{})
-	if !ok {
-		return fallback()
-	}
-	uri, ok := first["Uri"].(string)
-	if !ok {
-		return fallback()
-	}
-	u, err := url.Parse(uri)
-	if err != nil {
-		return fallback()
-	}
-	se := u.Query().Get("se")
-	if se == "" {
-		return fallback()
-	}
-	t, err := time.Parse(time.RFC3339, se)
+	t, err := time.Parse(time.RFC3339, expStr)
 	if err != nil {
 		return fallback()
 	}
@@ -251,9 +230,10 @@ func parseLinkExpiry(rawJSON []byte) time.Time {
 	return time.Now().Add(jitter(ttl, 5*time.Minute))
 }
 
-// extractRawExpiry returns the raw `se` signed-expiry query param from the
-// first URL in a GetProductDownloadLinksBySku response (RFC3339 string).
-// Returns "" if absent, unparseable, or not present in the JSON.
+// extractRawExpiry returns the raw expiration timestamp from the first URL
+// in a GetProductDownloadLinksBySku response (RFC3339 string).
+// It supports `se` (RFC3339) and `P1` (Unix timestamp) query parameters.
+// Returns "" if absent or unparseable.
 func extractRawExpiry(rawJSON []byte) string {
 	var data map[string]interface{}
 	if err := json.Unmarshal(rawJSON, &data); err != nil {
@@ -275,14 +255,22 @@ func extractRawExpiry(rawJSON []byte) string {
 	if err != nil {
 		return ""
 	}
-	se := u.Query().Get("se")
-	if se == "" {
-		return ""
+
+	// 1. Try "se" query parameter (used on Server/Eval ISOs)
+	if se := u.Query().Get("se"); se != "" {
+		if _, err := time.Parse(time.RFC3339, se); err == nil {
+			return se
+		}
 	}
-	if _, err := time.Parse(time.RFC3339, se); err != nil {
-		return ""
+
+	// 2. Try "P1" query parameter (Unix timestamp, used on Consumer ISOs)
+	if p1 := u.Query().Get("P1"); p1 != "" {
+		if p1Int, err := strconv.ParseInt(p1, 10, 64); err == nil {
+			return time.Unix(p1Int, 0).Format(time.RFC3339)
+		}
 	}
-	return se
+
+	return ""
 }
 
 // rateLimitError marks a Microsoft rate-limit response so callers can choose
@@ -1275,11 +1263,11 @@ func handleContribute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validation 3: expiry must be > 1 hour out.
-	// Use extractRawExpiry (direct se timestamp) — NOT parseLinkExpiry, which has
+	// Use extractRawExpiry (direct expiry timestamp) — NOT parseLinkExpiry, which has
 	// a 1h safety floor that would accept already-expired URLs.
 	seStr := extractRawExpiry(raw)
 	if seStr == "" {
-		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no valid se param)\n", productID, skuID)
+		log.Printf("contribute: product_id=%s sku_id=%s -> rejected (no valid expiry param)\n", productID, skuID)
 		respondJSONError(w, http.StatusUnprocessableEntity, "no valid signed expiry found in download URL")
 		return
 	}
