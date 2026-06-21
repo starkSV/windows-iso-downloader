@@ -855,7 +855,17 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		bodyStr := string(bodyBytes)
+		// Sentinel WAF block — the session is tainted; evict it so the next request
+		// starts a clean session rather than hammering the same poisoned one.
+		if strings.Contains(bodyStr, "Sentinel") {
+			cacheMutex.Lock()
+			delete(sessionCache, productID)
+			cacheMutex.Unlock()
+			log.Printf("MS fetch /proxy: Sentinel block for product_id=%s — session evicted\n", productID)
+			return nil, &rateLimitError{"Sentinel marked this request as rejected."}
+		}
+		return nil, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	if len(bodyBytes) > 0 && bodyBytes[0] == '"' {
