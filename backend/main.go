@@ -473,6 +473,17 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 
 var contributeRL = newIPRateLimiter(5, 5) // 5 requests/min, burst of 5
 
+var telemetryRL = newIPRateLimiter(10, 10) // 10 requests/min, burst 10
+
+type telemetryPayload struct {
+	Action    string `json:"action"`
+	ProductID string `json:"product_id"`
+	EvalSlug  string `json:"eval_slug"`
+	Platform  string `json:"platform"`
+	Version   string `json:"version"`
+	Success   bool   `json:"success"`
+}
+
 // --- Evalcenter helpers ---
 
 func detectArch(rawURL string) string {
@@ -1428,6 +1439,60 @@ func cleanupCaches() {
 	}
 }
 
+// --- /telemetry endpoint ---
+
+func handleTelemetry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+	}
+	if !telemetryRL.allow(ip) {
+		respondJSONError(w, http.StatusTooManyRequests, "rate limit exceeded")
+		return
+	}
+
+	var p telemetryPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	validActions := map[string]bool{"fetch": true, "eval": true, "list": true, "interactive": true}
+	if !validActions[p.Action] {
+		respondJSONError(w, http.StatusBadRequest, "invalid action")
+		return
+	}
+
+	if rdb != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		rdb.HIncrBy(ctx, "msdl:telemetry:actions", p.Action, 1)
+		if p.Platform != "" {
+			rdb.HIncrBy(ctx, "msdl:telemetry:platforms", p.Platform, 1)
+		}
+		if p.Version != "" {
+			rdb.HIncrBy(ctx, "msdl:telemetry:versions", p.Version, 1)
+		}
+		if p.ProductID != "" {
+			rdb.HIncrBy(ctx, "msdl:telemetry:products", p.ProductID, 1)
+		}
+		result := "success"
+		if !p.Success {
+			result = "failed"
+		}
+		rdb.HIncrBy(ctx, "msdl:telemetry:results", result, 1)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
+}
+
 // --- /cli/version endpoint ---
 
 func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
@@ -1554,6 +1619,7 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 	mux.HandleFunc("/cli/version", handleCLIVersion)
+	mux.HandleFunc("/telemetry", handleTelemetry)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
