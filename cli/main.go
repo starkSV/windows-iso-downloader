@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// Version is injected at build time via -ldflags "-X main.Version=0.3.0".
+// Falls back to "dev" for local builds.
+var Version = "dev"
+
 // contributeURL is the MSDL backend endpoint that warms the shared link cache.
 // Override with MSDL_API_URL env var, e.g. export MSDL_API_URL=http://localhost:3002
 const contributeSecret = "msdl-contribute-2026"
@@ -78,6 +82,13 @@ Usage:
 
 Flags:`)
 		fs.PrintDefaults()
+		fmt.Fprintln(os.Stderr, `
+Environment:
+  MSDL_NO_TELEMETRY=1    Disable anonymous usage reporting and update checks
+  MSDL_NO_CONTRIBUTE=1   Disable cache contribution
+  MSDL_API_URL=<url>     Override backend URL (default: https://api.msdl.tech-latest.com)
+
+More info: https://msdl.tech-latest.com/cli`)
 	}
 
 	productID := fs.String("id", "", "consumer product ID (skips product picker)")
@@ -87,6 +98,9 @@ Flags:`)
 	noContributeFlag := fs.Bool("no-contribute", false, "skip sharing the link with the msdl.tech cache")
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil // fs.Usage already printed
+		}
 		return err
 	}
 	query := strings.Join(fs.Args(), " ")

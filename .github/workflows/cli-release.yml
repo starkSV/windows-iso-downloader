@@ -20,11 +20,13 @@ jobs:
       - name: Build binaries
         working-directory: cli
         run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#cli/v}"
           mkdir -p ../dist
-          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-linux-amd64   .
-          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-darwin-amd64  .
-          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/msdl-darwin-arm64  .
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/msdl-windows-amd64.exe .
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-linux-amd64   .
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-darwin-amd64  .
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-darwin-arm64  .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-windows-amd64.exe .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
