@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -33,11 +34,80 @@ func urlFilename(rawURL string) string {
 	return s
 }
 
-func contributeURL() string {
+// apiBaseURL returns the backend base URL, with MSDL_API_URL override.
+func apiBaseURL() string {
 	if u := os.Getenv("MSDL_API_URL"); u != "" {
-		return strings.TrimRight(u, "/") + "/contribute"
+		return strings.TrimRight(u, "/")
 	}
-	return "https://api.msdl.tech-latest.com/contribute"
+	return "https://api.msdl.tech-latest.com"
+}
+
+func contributeURL() string {
+	return apiBaseURL() + "/contribute"
+}
+
+// printUpdateNotice checks /cli/version and prints a notice if a newer version
+// is available. Blocks up to 500ms; silently no-ops on timeout or any error.
+func printUpdateNotice() {
+	ch := make(chan string, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBaseURL()+"/cli/version", nil)
+		if err != nil {
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		var body struct {
+			Latest string `json:"latest"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return
+		}
+		ch <- body.Latest
+	}()
+	select {
+	case latest := <-ch:
+		if latest != "" && latest != Version && Version != "dev" {
+			fmt.Fprintf(os.Stderr, "\n  A new version of msdl is available: v%s\n", latest)
+			fmt.Fprintf(os.Stderr, "  Download: https://github.com/starkSV/windows-iso-downloader/releases/latest\n\n")
+		}
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+type cliTelemetryPayload struct {
+	Action    string `json:"action"`
+	ProductID string `json:"product_id,omitempty"`
+	EvalSlug  string `json:"eval_slug,omitempty"`
+	Platform  string `json:"platform"`
+	Version   string `json:"version"`
+	Success   bool   `json:"success"`
+}
+
+// sendTelemetry posts a single telemetry event. Fire-and-forget: all errors
+// are silently ignored so telemetry never affects the user experience.
+func sendTelemetry(p cliTelemetryPayload) {
+	body, err := json.Marshal(p)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBaseURL()+"/telemetry", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
 }
 
 func postContribute(productID, skuID string, rawJSON []byte) {
@@ -105,6 +175,12 @@ More info: https://msdl.tech-latest.com/cli`)
 	}
 	query := strings.Join(fs.Args(), " ")
 	noContribute := *noContributeFlag || os.Getenv("MSDL_NO_CONTRIBUTE") == "1"
+	noTelemetry := os.Getenv("MSDL_NO_TELEMETRY") == "1"
+
+	// Update check — blocks up to 500ms, then continues regardless
+	if !noTelemetry {
+		printUpdateNotice()
+	}
 
 	if *listMode {
 		fmt.Fprintln(os.Stderr, "Consumer products:")
@@ -115,13 +191,49 @@ More info: https://msdl.tech-latest.com/cli`)
 		for _, p := range evalProducts {
 			fmt.Fprintf(os.Stderr, "  %-20s %s\n", p.Slug, p.Name)
 		}
+		if !noTelemetry {
+			go sendTelemetry(cliTelemetryPayload{
+				Action:   "list",
+				Platform: runtime.GOOS,
+				Version:  Version,
+				Success:  true,
+			})
+		}
 		return nil
 	}
 
-	if *evalMode {
-		return runEval(query)
+	// Determine telemetry fields before running (product_id / eval_slug known at this point)
+	telAction := "interactive"
+	telProductID := ""
+	telEvalSlug := ""
+	switch {
+	case *evalMode:
+		telAction = "eval"
+		telEvalSlug = query
+	case *productID != "":
+		telAction = "fetch"
+		telProductID = *productID
 	}
-	return runConsumer(*productID, query, *langFlag, noContribute)
+
+	var err error
+	if *evalMode {
+		err = runEval(query)
+	} else {
+		err = runConsumer(*productID, query, *langFlag, noContribute)
+	}
+
+	if !noTelemetry {
+		go sendTelemetry(cliTelemetryPayload{
+			Action:    telAction,
+			ProductID: telProductID,
+			EvalSlug:  telEvalSlug,
+			Platform:  runtime.GOOS,
+			Version:   Version,
+			Success:   err == nil,
+		})
+	}
+
+	return err
 }
 
 func runConsumer(productID, query, langName string, noContribute bool) error {
