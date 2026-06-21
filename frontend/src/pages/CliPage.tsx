@@ -98,9 +98,19 @@ export default function CliPage() {
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-white">Install</h2>
 
+            {/* winget — Windows primary */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono font-semibold tracking-widest uppercase text-emerald-500">Windows · winget</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-600 font-mono">recommended</span>
+              </div>
+              <CodeBlock code="winget install starkSV.msdl" />
+            </div>
+
+            {/* Manual / other platforms */}
             <div className="rounded-xl border border-white/7 bg-[#111113] p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-[12px] text-zinc-400">Download the latest binary for your platform:</p>
+                <p className="text-[12px] text-zinc-400">Other platforms — download binary manually:</p>
                 <a
                   href={RELEASES_URL}
                   target="_blank"
@@ -115,7 +125,7 @@ export default function CliPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                 {[
-                  { os: 'Windows', file: 'msdl-windows-amd64.exe', rename: 'msdl.exe' },
+                  { os: 'Windows (manual)', file: 'msdl-windows-amd64.exe', rename: 'msdl.exe' },
                   { os: 'macOS (Apple Silicon)', file: 'msdl-darwin-arm64', rename: 'msdl' },
                   { os: 'macOS (Intel)', file: 'msdl-darwin-amd64', rename: 'msdl' },
                   { os: 'Linux', file: 'msdl-linux-amd64', rename: 'msdl' },
@@ -126,11 +136,6 @@ export default function CliPage() {
                     <p className="text-zinc-600">Rename to <code className="text-zinc-400">{p.rename}</code> · add to PATH</p>
                   </div>
                 ))}
-              </div>
-
-              <div className="flex items-center gap-2 pt-1 border-t border-white/5">
-                <span className="text-[11px] text-zinc-600">winget install starkSV.msdl</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500">coming soon</span>
               </div>
             </div>
           </div>
