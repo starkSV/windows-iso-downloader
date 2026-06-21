@@ -36,6 +36,8 @@ const (
 	ORG_ID      = "y6jn8c31"
 	CUSTOMER_ID = "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
 	PORT        = ":3002"
+
+	latestCLIVersion = "0.3.0"
 )
 
 // --- Session cache (short-lived, used to chain /skuinfo → /proxy) ---
@@ -1426,6 +1428,13 @@ func cleanupCaches() {
 	}
 }
 
+// --- /cli/version endpoint ---
+
+func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"latest": latestCLIVersion})
+}
+
 // --- /metrics endpoint ---
 
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -1544,6 +1553,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	mux.HandleFunc("/cli/version", handleCLIVersion)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
