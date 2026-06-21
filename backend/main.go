@@ -1588,6 +1588,33 @@ func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
 
 // --- /metrics endpoint ---
 
+// loadTelemetryFromRedis reads all telemetry counters from Redis.
+// Returns nil maps when Redis is unavailable.
+func loadTelemetryFromRedis() map[string]map[string]string {
+	if rdb == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	keys := []string{
+		"msdl:telemetry:actions",
+		"msdl:telemetry:platforms",
+		"msdl:telemetry:versions",
+		"msdl:telemetry:products",
+		"msdl:telemetry:results",
+	}
+	out := make(map[string]map[string]string, len(keys))
+	for _, k := range keys {
+		vals, err := rdb.HGetAll(ctx, k).Result()
+		if err == nil {
+			// Strip the "msdl:telemetry:" prefix for the JSON key
+			name := strings.TrimPrefix(k, "msdl:telemetry:")
+			out[name] = vals
+		}
+	}
+	return out
+}
+
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	secret := os.Getenv("METRICS_SECRET")
 	if secret == "" {
@@ -1639,6 +1666,8 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	evalSize := len(evalCache)
 	evalCacheMu.RUnlock()
 
+	telemetry := loadTelemetryFromRedis()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"sku": map[string]interface{}{
@@ -1667,6 +1696,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		},
 		"neg_cache_size":   negSize,
 		"total_ms_fetches": skuFetches + linkFetches,
+		"telemetry":        telemetry,
 	})
 }
 
