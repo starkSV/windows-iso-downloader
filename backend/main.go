@@ -793,9 +793,9 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 	if exists && time.Since(cached.CreatedAt) < SESSION_TTL {
 		sessionID = cached.SessionID
 		jar = cached.Jar
-		log.Printf("MS fetch /proxy: reusing session %s for product_id=%s\n", sessionID[:8], productID)
+		log.Printf("MS fetch /proxy: reusing session %s for product_id=%s sku_id=%s\n", sessionID[:8], productID, skuID)
 	} else {
-		log.Printf("MS fetch /proxy: new session for product_id=%s\n", productID)
+		log.Printf("MS fetch /proxy: new session for product_id=%s sku_id=%s\n", productID, skuID)
 		sessionID, jar, _ = setupSession()
 
 		// Warm the session with a SKU info call so cookies from setup carry through
@@ -887,6 +887,13 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 				return nil, &rateLimitError{msg}
 			}
 			if val, exists := errMap["Value"].(string); exists {
+				if strings.Contains(val, "Sentinel") {
+					cacheMutex.Lock()
+					delete(sessionCache, productID)
+					cacheMutex.Unlock()
+					log.Printf("MS fetch /proxy: Sentinel block for product_id=%s — session evicted\n", productID)
+					return nil, &rateLimitError{"Sentinel marked this request as rejected."}
+				}
 				return nil, fmt.Errorf("%s", val)
 			}
 		}
