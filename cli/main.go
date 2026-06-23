@@ -308,18 +308,42 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 	}
 
 	fmt.Fprintln(os.Stderr, "")
-	for _, link := range links {
+
+	var selectedURI string
+	if isTerminal() && len(links) > 1 {
+		link, err := pickArchitecture(links)
+		if err != nil {
+			return err
+		}
 		name := urlFilename(link.URI)
-		fmt.Fprintf(os.Stderr, "  %s\n", name)
-		fmt.Fprintf(os.Stderr, "  %s\n", strings.Repeat("─", len(name)))
-		fmt.Println(link.URI) // stdout — stays clean for piping
-		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "\n  %s\n", name)
+		fmt.Fprintf(os.Stderr, "  %s\n\n", strings.Repeat("─", len(name)))
+		fmt.Println(link.URI)
+		selectedURI = link.URI
+	} else {
+		for _, link := range links {
+			name := urlFilename(link.URI)
+			fmt.Fprintf(os.Stderr, "  %s\n", name)
+			fmt.Fprintf(os.Stderr, "  %s\n", strings.Repeat("─", len(name)))
+			fmt.Println(link.URI) // stdout — stays clean for piping
+			fmt.Fprintln(os.Stderr, "")
+		}
+		if len(links) == 1 {
+			selectedURI = links[0].URI
+		}
 	}
 
 	if !noContribute {
 		fmt.Fprintln(os.Stderr, "  ✓ Shared with MSDL Web App (https://msdl.tech-latest.com/)")
 		fmt.Fprintln(os.Stderr, "    Opt out: --no-contribute")
 		fmt.Fprintln(os.Stderr, "")
+	}
+
+	if isTerminal() && selectedURI != "" {
+		postFetchMenu(selectedURI)
+	}
+
+	if !noContribute {
 		// Wait up to 5s for the contribution to complete before process exit.
 		done := make(chan struct{})
 		go func() { wg.Wait(); close(done) }()
@@ -359,6 +383,9 @@ func runEval(slug string) error {
 
 	if len(links) == 1 {
 		fmt.Println(links[0].URL)
+		if isTerminal() {
+			postFetchMenu(links[0].URL)
+		}
 		return nil
 	}
 
@@ -377,6 +404,10 @@ func runEval(slug string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(links[n-1].URL)
+	selected := links[n-1].URL
+	fmt.Println(selected)
+	if isTerminal() {
+		postFetchMenu(selected)
+	}
 	return nil
 }

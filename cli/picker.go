@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -75,4 +77,80 @@ func pickEvalProduct(products []EvalProduct) (EvalProduct, error) {
 		return EvalProduct{}, err
 	}
 	return products[n-1], nil
+}
+
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func pickArchitecture(links []DownloadLink) (DownloadLink, error) {
+	fmt.Fprintln(os.Stderr, "Select architecture:")
+	for i, l := range links {
+		label := l.Architecture
+		if label == "" {
+			label = fmt.Sprintf("link %d", i+1)
+		}
+		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, label)
+	}
+	fmt.Fprint(os.Stderr, "\nChoice: ")
+	n, err := parseChoice(os.Stdin, len(links))
+	if err != nil {
+		return DownloadLink{}, err
+	}
+	return links[n-1], nil
+}
+
+func openInBrowser(rawURL string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", rawURL)
+	case "darwin":
+		cmd = exec.Command("open", rawURL)
+	default:
+		cmd = exec.Command("xdg-open", rawURL)
+	}
+	return cmd.Run()
+}
+
+func copyToClipboard(text string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "clip")
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	default:
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		} else {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		}
+	}
+	cmd.Stdin = strings.NewReader(text)
+	return cmd.Run()
+}
+
+func postFetchMenu(uri string) {
+	fmt.Fprint(os.Stderr, "\n  [O] Open in browser   [C] Copy to clipboard   [Enter] Exit\n  > ")
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(scanner.Text())) {
+	case "o":
+		if err := openInBrowser(uri); err != nil {
+			fmt.Fprintln(os.Stderr, "  Could not open browser:", err)
+		}
+	case "c":
+		if err := copyToClipboard(uri); err != nil {
+			fmt.Fprintln(os.Stderr, "  Could not copy to clipboard:", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "  ✓ Copied to clipboard")
+		}
+	}
 }
