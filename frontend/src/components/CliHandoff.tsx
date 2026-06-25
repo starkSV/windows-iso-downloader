@@ -11,7 +11,7 @@ interface Props {
   highlight?: boolean
 }
 
-const RELEASES_URL = 'https://github.com/starkSV/windows-iso-downloader/releases/latest'
+const RELEASES_URL = 'https://minxl.ink/msdl-github-release'
 
 function InstallSteps() {
   return (
