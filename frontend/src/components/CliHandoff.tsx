@@ -72,8 +72,8 @@ export default function CliHandoff({ productId, langName, langDisplay, defaultOp
   const [copied, setCopied] = useState(false)
 
   const command = langName
-    ? `msdl --id ${productId} --lang "${langName}"`
-    : `msdl --id ${productId}`
+    ? `msdl.exe --id ${productId} --lang "${langName}"`
+    : `msdl.exe --id ${productId}`
 
   function handleCopy() {
     navigator.clipboard.writeText(command)
