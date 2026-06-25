@@ -544,7 +544,10 @@ export default function ProductDetailPage() {
                 >
                   <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/8 border border-red-500/15 text-red-400 text-sm">
                     <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
+                    <span>{isLockdown
+                      ? 'Our server has been temporarily blocked by Microsoft and is in a 90-minute cooldown. Use the CLI to get your link instantly — it bypasses our server entirely.'
+                      : error
+                    }</span>
                   </div>
                   {selectedSku && (
                     <CliHandoff
