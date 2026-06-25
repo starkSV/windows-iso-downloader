@@ -115,18 +115,20 @@ var (
 	linkCacheMu sync.RWMutex
 )
 
-// --- Negative cache (60s — prevents thundering herd during rate-limit events) ---
+// --- Negative cache (60s normal / 90min Sentinel lockdown) ---
 
 type negCacheEntry struct {
-	Message   string
-	HTTPCode  int
-	ExpiresAt time.Time
+	Message    string
+	HTTPCode   int
+	ExpiresAt  time.Time
+	IsSentinel bool // Sentinel WAF block: use lockdownTTL and suppress background refresh
 }
 
 var (
 	negCache    = make(map[string]negCacheEntry)
 	negCacheMu  sync.RWMutex
 	negCacheTTL = 60 * time.Second
+	lockdownTTL = 90 * time.Minute
 )
 
 // --- Singleflight (one in-flight Microsoft fetch per unique key) ---
@@ -950,7 +952,7 @@ func enableCORS(next http.Handler) http.Handler {
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Expose-Headers", "X-MSDL-Link-Status, X-MSDL-Link-Expires")
+		w.Header().Set("Access-Control-Expose-Headers", "X-MSDL-Link-Status, X-MSDL-Link-Expires, X-MSDL-Lockdown")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -1075,6 +1077,38 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	negKey := "link:" + cacheKey
 	forceRefresh := r.URL.Query().Get("force") == "true"
 
+	// 0. Sentinel lockdown gate — checked before everything, including force refresh.
+	// When a Sentinel block is active, zero Microsoft API calls are made regardless
+	// of force=true, to avoid extending the block timer.
+	negCacheMu.RLock()
+	lockdownEntry, hasLockdown := negCache[negKey]
+	negCacheMu.RUnlock()
+	if hasLockdown && time.Now().Before(lockdownEntry.ExpiresAt) && lockdownEntry.IsSentinel {
+		atomic.AddInt64(&mLinkNegHits, 1)
+		w.Header().Set("X-MSDL-Lockdown", "1")
+		linkCacheMu.RLock()
+		staleEntry, hasStale := linkCache[cacheKey]
+		linkCacheMu.RUnlock()
+		if hasStale {
+			atomic.AddInt64(&mLinkStale, 1)
+			log.Printf("/proxy: product_id=%s sku_id=%s -> lockdown active, serving stale (expires %s)\n",
+				productID, skuID, lockdownEntry.ExpiresAt.Format(time.RFC3339))
+			w.Header().Set("X-MSDL-Link-Status", "stale")
+			if exp := extractRawExpiry(staleEntry.RawJSON); exp != "" {
+				w.Header().Set("X-MSDL-Link-Expires", exp)
+			}
+			w.Write(staleEntry.RawJSON)
+			return
+		}
+		log.Printf("/proxy: product_id=%s sku_id=%s -> lockdown active, no stale available\n", productID, skuID)
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":    lockdownEntry.Message,
+			"lockdown": true,
+		})
+		return
+	}
+
 	// 1. Check link cache (dynamic TTL, stale-on-failure) — skipped when force=true
 	linkCacheMu.RLock()
 	cached, hasCached := linkCache[cacheKey]
@@ -1137,10 +1171,33 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		// 6. Stale-on-failure: serve expired cache entry rather than erroring out
-		// Also fire a background refresh so the next request gets fresh data.
+		isSentinel := strings.Contains(err.Error(), "Sentinel")
+
+		// Stale-on-failure: serve expired cache entry rather than erroring out.
 		if hasCached {
 			atomic.AddInt64(&mLinkStale, 1)
+
+			if isSentinel {
+				// Sentinel lockdown: set 90-min neg cache, add lockdown header, skip
+				// background refresh — retrying extends the Sentinel block timer.
+				negCacheMu.Lock()
+				negCache[negKey] = negCacheEntry{
+					Message:    err.Error(),
+					HTTPCode:   http.StatusTooManyRequests,
+					ExpiresAt:  time.Now().Add(lockdownTTL),
+					IsSentinel: true,
+				}
+				negCacheMu.Unlock()
+				log.Printf("/proxy: product_id=%s sku_id=%s -> Sentinel lockdown (90min), serving stale\n", productID, skuID)
+				w.Header().Set("X-MSDL-Lockdown", "1")
+				w.Header().Set("X-MSDL-Link-Status", "stale")
+				if exp := extractRawExpiry(cached.RawJSON); exp != "" {
+					w.Header().Set("X-MSDL-Link-Expires", exp)
+				}
+				w.Write(cached.RawJSON)
+				return
+			}
+
 			log.Printf("/proxy: product_id=%s sku_id=%s -> fetch failed (%v), serving stale\n", productID, skuID, err)
 			go func() {
 				// Use singleflight so concurrent stale serves don't all hit Microsoft
@@ -1168,17 +1225,32 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// No stale data available.
 		code := http.StatusBadGateway
-		// 4. Negative cache for rate-limit errors (only when no stale available)
 		if _, isRL := err.(*rateLimitError); isRL {
 			code = http.StatusTooManyRequests
+			ttl := negCacheTTL
+			if isSentinel {
+				ttl = lockdownTTL
+			}
 			negCacheMu.Lock()
 			negCache[negKey] = negCacheEntry{
-				Message:   err.Error(),
-				HTTPCode:  code,
-				ExpiresAt: time.Now().Add(negCacheTTL),
+				Message:    err.Error(),
+				HTTPCode:   code,
+				ExpiresAt:  time.Now().Add(ttl),
+				IsSentinel: isSentinel,
 			}
 			negCacheMu.Unlock()
+			if isSentinel {
+				log.Printf("/proxy: product_id=%s sku_id=%s -> Sentinel lockdown (90min), no stale\n", productID, skuID)
+				w.Header().Set("X-MSDL-Lockdown", "1")
+				w.WriteHeader(code)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error":    err.Error(),
+					"lockdown": true,
+				})
+				return
+			}
 		}
 		respondJSONError(w, code, err.Error())
 		return
