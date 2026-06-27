@@ -115,6 +115,15 @@ var (
 	linkCacheMu sync.RWMutex
 )
 
+// truncateBody caps a response body string for log output.
+func truncateBody(s string) string {
+	const max = 120
+	if len(s) > max {
+		return s[:max] + "..."
+	}
+	return s
+}
+
 // --- Negative cache (60s normal / 90min Sentinel lockdown) ---
 
 type negCacheEntry struct {
@@ -736,7 +745,7 @@ func fetchSkuInfoFromMS(productID string) ([]byte, int, error) {
 
 		if resp.StatusCode != http.StatusOK {
 			if attempt == 2 {
-				return nil, http.StatusBadGateway, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+				return nil, http.StatusBadGateway, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, truncateBody(string(bodyBytes)))
 			}
 			continue
 		}
@@ -867,7 +876,7 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 			log.Printf("MS fetch /proxy: Sentinel block for product_id=%s — session evicted\n", productID)
 			return nil, &rateLimitError{"Sentinel marked this request as rejected."}
 		}
-		return nil, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, bodyStr)
+		return nil, fmt.Errorf("Microsoft API returned HTTP %d: %s", resp.StatusCode, truncateBody(bodyStr))
 	}
 
 	if len(bodyBytes) > 0 && bodyBytes[0] == '"' {
