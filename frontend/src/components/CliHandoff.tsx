@@ -14,9 +14,29 @@ interface Props {
 const RELEASES_URL = 'https://minxl.ink/msdl-github-release'
 
 function InstallSteps() {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    navigator.clipboard.writeText('winget install starkSV.msdl')
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <p className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-600">1. Install</p>
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-mono font-semibold tracking-widest uppercase text-emerald-500">Windows · winget</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-600 font-mono">recommended</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 rounded bg-black/30 px-3 py-2">
+          <code className="text-[12px] font-mono text-zinc-300">winget install starkSV.msdl</code>
+          <button onClick={handleCopy} className="flex-shrink-0 text-zinc-500 hover:text-white transition-colors">
+            {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+          </button>
+        </div>
+      </div>
       <a
         href={RELEASES_URL}
         target="_blank"
@@ -24,14 +44,8 @@ function InstallSteps() {
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/4 border border-white/7 text-[12px] text-zinc-400 hover:text-zinc-200 hover:border-white/12 transition-colors"
       >
         <ExternalLink size={12} className="flex-shrink-0 text-zinc-600" />
-        Download msdl from GitHub Releases
+        Other platforms — GitHub Releases
       </a>
-      <p className="text-[12px] text-zinc-400 leading-relaxed pt-0.5">
-        Rename the downloaded file and add its folder to your PATH:<br />
-        <span className="text-zinc-500">Windows →</span> <code className="font-mono text-zinc-300 bg-white/5 px-1 rounded">msdl.exe</code>
-        <span className="mx-2 text-zinc-700">·</span>
-        <span className="text-zinc-500">macOS/Linux →</span> <code className="font-mono text-zinc-300 bg-white/5 px-1 rounded">msdl</code>
-      </p>
     </div>
   )
 }
@@ -72,8 +86,8 @@ export default function CliHandoff({ productId, langName, langDisplay, defaultOp
   const [copied, setCopied] = useState(false)
 
   const command = langName
-    ? `msdl.exe --id ${productId} --lang "${langName}"`
-    : `msdl.exe --id ${productId}`
+    ? `msdl --id ${productId} --lang "${langName}"`
+    : `msdl --id ${productId}`
 
   function handleCopy() {
     navigator.clipboard.writeText(command)

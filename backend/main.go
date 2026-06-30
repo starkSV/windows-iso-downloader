@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +38,8 @@ const (
 	ORG_ID      = "y6jn8c31"
 	CUSTOMER_ID = "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
 	PORT        = ":3002"
+
+	latestCLIVersion = "0.3.0"
 )
 
 // --- Session cache (short-lived, used to chain /skuinfo → /proxy) ---
@@ -316,6 +320,7 @@ func initRedis() {
 	}
 	rdb = client
 	log.Println("redis: connected")
+	seedMetricsFromRedis()
 }
 
 func redisWriteLink(productID, skuID string, raw []byte, expiresAt time.Time) {
@@ -375,6 +380,89 @@ func redisSeedLinkCache() {
 	}
 	if seeded > 0 {
 		log.Printf("redis: seeded %d link cache entries from Redis\n", seeded)
+	}
+}
+
+// seedMetricsFromRedis loads persisted metric counters from Redis into the
+// in-memory atomic vars. Called once on startup after Redis connects.
+func seedMetricsFromRedis() {
+	if rdb == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	loadHash := func(key string) map[string]string {
+		vals, err := rdb.HGetAll(ctx, key).Result()
+		if err != nil {
+			return nil
+		}
+		return vals
+	}
+	parseI64 := func(m map[string]string, field string) int64 {
+		if m == nil {
+			return 0
+		}
+		v, _ := strconv.ParseInt(m[field], 10, 64)
+		return v
+	}
+
+	sku := loadHash("msdl:metrics:sku")
+	atomic.StoreInt64(&mSkuRequests, parseI64(sku, "requests"))
+	atomic.StoreInt64(&mSkuCacheHits, parseI64(sku, "cache_hits"))
+	atomic.StoreInt64(&mSkuFetches, parseI64(sku, "ms_fetches"))
+	atomic.StoreInt64(&mSkuNegHits, parseI64(sku, "neg_hits"))
+
+	link := loadHash("msdl:metrics:link")
+	atomic.StoreInt64(&mLinkRequests, parseI64(link, "requests"))
+	atomic.StoreInt64(&mLinkCacheHits, parseI64(link, "cache_hits"))
+	atomic.StoreInt64(&mLinkFetches, parseI64(link, "ms_fetches"))
+	atomic.StoreInt64(&mLinkNegHits, parseI64(link, "neg_hits"))
+	atomic.StoreInt64(&mLinkStale, parseI64(link, "stale"))
+
+	eval := loadHash("msdl:metrics:eval")
+	atomic.StoreInt64(&mEvalRequests, parseI64(eval, "requests"))
+	atomic.StoreInt64(&mEvalCacheHits, parseI64(eval, "cache_hits"))
+	atomic.StoreInt64(&mEvalStale, parseI64(eval, "stale"))
+
+	log.Println("redis: seeded in-memory metrics from Redis")
+}
+
+// flushMetricsToRedis writes current in-memory metric counters to Redis.
+// Called periodically (every 5 min) and on graceful shutdown.
+func flushMetricsToRedis() {
+	if rdb == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rdb.HSet(ctx, "msdl:metrics:sku",
+		"requests", atomic.LoadInt64(&mSkuRequests),
+		"cache_hits", atomic.LoadInt64(&mSkuCacheHits),
+		"ms_fetches", atomic.LoadInt64(&mSkuFetches),
+		"neg_hits", atomic.LoadInt64(&mSkuNegHits),
+	)
+	rdb.HSet(ctx, "msdl:metrics:link",
+		"requests", atomic.LoadInt64(&mLinkRequests),
+		"cache_hits", atomic.LoadInt64(&mLinkCacheHits),
+		"ms_fetches", atomic.LoadInt64(&mLinkFetches),
+		"neg_hits", atomic.LoadInt64(&mLinkNegHits),
+		"stale", atomic.LoadInt64(&mLinkStale),
+	)
+	rdb.HSet(ctx, "msdl:metrics:eval",
+		"requests", atomic.LoadInt64(&mEvalRequests),
+		"cache_hits", atomic.LoadInt64(&mEvalCacheHits),
+		"stale", atomic.LoadInt64(&mEvalStale),
+	)
+	log.Println("redis: flushed in-memory metrics to Redis")
+}
+
+// startMetricsFlusher flushes in-memory metrics to Redis every 5 minutes.
+func startMetricsFlusher() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		flushMetricsToRedis()
 	}
 }
 
@@ -481,6 +569,17 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 }
 
 var contributeRL = newIPRateLimiter(5, 5) // 5 requests/min, burst of 5
+
+var telemetryRL = newIPRateLimiter(10, 10) // 10 requests/min, burst 10
+
+type telemetryPayload struct {
+	Action    string `json:"action"`
+	ProductID string `json:"product_id"`
+	EvalSlug  string `json:"eval_slug"`
+	Platform  string `json:"platform"`
+	Version   string `json:"version"`
+	Success   bool   `json:"success"`
+}
 
 // --- Evalcenter helpers ---
 
@@ -1514,7 +1613,100 @@ func cleanupCaches() {
 	}
 }
 
+// --- /telemetry endpoint ---
+
+func handleTelemetry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+	}
+	if !telemetryRL.allow(ip) {
+		respondJSONError(w, http.StatusTooManyRequests, "rate limit exceeded")
+		return
+	}
+
+	var p telemetryPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		respondJSONError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	validActions := map[string]bool{"fetch": true, "eval": true, "list": true, "interactive": true}
+	if !validActions[p.Action] {
+		respondJSONError(w, http.StatusBadRequest, "invalid action")
+		return
+	}
+
+	if rdb != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		rdb.HIncrBy(ctx, "msdl:telemetry:actions", p.Action, 1)
+		validPlatforms := map[string]bool{"windows": true, "darwin": true, "linux": true}
+		if validPlatforms[p.Platform] {
+			rdb.HIncrBy(ctx, "msdl:telemetry:platforms", p.Platform, 1)
+		}
+		if p.Version != "" && len(p.Version) <= 20 {
+			rdb.HIncrBy(ctx, "msdl:telemetry:versions", p.Version, 1)
+		}
+		if p.ProductID != "" && len(p.ProductID) <= 10 {
+			rdb.HIncrBy(ctx, "msdl:telemetry:products", p.ProductID, 1)
+		}
+		result := "success"
+		if !p.Success {
+			result = "failed"
+		}
+		rdb.HIncrBy(ctx, "msdl:telemetry:results", result, 1)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
+}
+
+// --- /cli/version endpoint ---
+
+func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"latest": latestCLIVersion})
+}
+
 // --- /metrics endpoint ---
+
+// loadTelemetryFromRedis reads all telemetry counters from Redis.
+// Returns nil maps when Redis is unavailable.
+func loadTelemetryFromRedis() map[string]map[string]string {
+	if rdb == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	keys := []string{
+		"msdl:telemetry:actions",
+		"msdl:telemetry:platforms",
+		"msdl:telemetry:versions",
+		"msdl:telemetry:products",
+		"msdl:telemetry:results",
+	}
+	out := make(map[string]map[string]string, len(keys))
+	for _, k := range keys {
+		vals, err := rdb.HGetAll(ctx, k).Result()
+		if err == nil {
+			// Strip the "msdl:telemetry:" prefix for the JSON key
+			name := strings.TrimPrefix(k, "msdl:telemetry:")
+			out[name] = vals
+		}
+	}
+	return out
+}
 
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	secret := os.Getenv("METRICS_SECRET")
@@ -1567,6 +1759,8 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	evalSize := len(evalCache)
 	evalCacheMu.RUnlock()
 
+	telemetry := loadTelemetryFromRedis()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"sku": map[string]interface{}{
@@ -1595,6 +1789,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		},
 		"neg_cache_size":   negSize,
 		"total_ms_fetches": skuFetches + linkFetches,
+		"telemetry":        telemetry,
 	})
 }
 
@@ -1620,14 +1815,16 @@ func main() {
 	go cleanupSessions()
 	go cleanupCaches()
 	go warmEvalCache()
+	go startMetricsFlusher()
 
 	mux := http.NewServeMux()
-
 	mux.HandleFunc("/skuinfo", handleSkuInfo)
 	mux.HandleFunc("/proxy", handleProxy)
 	mux.HandleFunc("/contribute", handleContribute)
 	mux.HandleFunc("/evallinks", handleEvalLinks)
 	mux.HandleFunc("/metrics", handleMetrics)
+	mux.HandleFunc("/telemetry", handleTelemetry)
+	mux.HandleFunc("/cli/version", handleCLIVersion)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
@@ -1641,10 +1838,21 @@ func main() {
 	})
 
 	handler := enableCORS(mux)
+	srv := &http.Server{Addr: PORT, Handler: handler}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutdown: flushing metrics to Redis...")
+		flushMetricsToRedis()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
 
 	log.Printf("Go Backend running on http://localhost%s\n", PORT)
-	err := http.ListenAndServe(PORT, handler)
-	if err != nil {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

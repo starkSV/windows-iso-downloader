@@ -78,6 +78,14 @@ msdl --id 3262 --lang "English" --no-contribute
 # or: MSDL_NO_CONTRIBUTE=1
 ```
 
+### Usage telemetry
+
+By default, each run sends an anonymous event to help us understand which products are popular and which platforms are used. No personal data is sent — only action type (`fetch`, `eval`, `list`, `interactive`), platform (`windows`, `darwin`, `linux`), CLI version, and whether the run succeeded. To opt out:
+
+```bash
+MSDL_NO_TELEMETRY=1 msdl --id 3262 --lang "English"
+```
+
 ---
 
 ## Project Structure
