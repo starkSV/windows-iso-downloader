@@ -202,28 +202,41 @@ More info: https://msdl.tech-latest.com/cli`)
 		return nil
 	}
 
-	// Determine telemetry fields before running (product_id / eval_slug known at this point)
 	telAction := "interactive"
 	telProductID := ""
 	telEvalSlug := ""
+
+	var err error
 	switch {
 	case *evalMode:
 		telAction = "eval"
 		telEvalSlug = query
+		err = runEval(query)
 	case *productID != "":
 		telAction = "fetch"
 		telProductID = *productID
-	}
-
-	var err error
-	if *evalMode {
-		err = runEval(query)
-	} else {
+		err = runConsumer(*productID, query, *langFlag, noContribute)
+	case query == "" && isTerminal():
+		// Pure interactive: combined consumer + eval picker
+		isEval, product, ep, pickErr := pickCombined()
+		if pickErr != nil {
+			return pickErr
+		}
+		if isEval {
+			telAction = "eval"
+			telEvalSlug = ep.Slug
+			err = runEval(ep.Slug)
+		} else {
+			telAction = "fetch"
+			telProductID = product.ID
+			err = runConsumer(product.ID, "", *langFlag, noContribute)
+		}
+	default:
 		err = runConsumer(*productID, query, *langFlag, noContribute)
 	}
 
 	if !noTelemetry {
-		go sendTelemetry(cliTelemetryPayload{
+		sendTelemetry(cliTelemetryPayload{
 			Action:    telAction,
 			ProductID: telProductID,
 			EvalSlug:  telEvalSlug,
@@ -245,10 +258,13 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 			return fmt.Errorf("unknown product ID %q — run msdl --list to see all products", productID)
 		}
 		product = p
-	} else if query != "" {
-		candidates := searchProducts(query)
-		if len(candidates) == 0 {
-			return fmt.Errorf("no products match %q — run msdl --list to see all products", query)
+	} else {
+		candidates := consumerProducts
+		if query != "" {
+			candidates = searchProducts(query)
+			if len(candidates) == 0 {
+				return fmt.Errorf("no products match %q — run msdl --list to see all products", query)
+			}
 		}
 		if len(candidates) == 1 {
 			product = candidates[0]
@@ -260,15 +276,6 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 				return err
 			}
 		}
-	} else {
-		isEval, selected, ep, err := pickCombined()
-		if err != nil {
-			return err
-		}
-		if isEval {
-			return runEval(ep.Slug)
-		}
-		product = selected
 	}
 
 	fmt.Fprintf(os.Stderr, "Setting up Microsoft session...\n")

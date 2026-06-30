@@ -12,6 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -28,6 +30,19 @@ jobs:
           GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-darwin-arm64  .
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-windows-amd64.exe .
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep 'cli/v' | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" "$PREV_TAG".."${{ github.ref_name }}" -- cli/ backend/ frontend/ | grep -v '^- chore(winget)' | head -30)
+          else
+            CHANGELOG="- Initial release"
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -35,12 +50,18 @@ jobs:
           name: "msdl CLI ${{ github.ref_name }}"
           files: dist/*
           body: |
+            ## What's New
+
+            ${{ steps.changelog.outputs.changelog }}
+
             ## Install
 
             **Windows (winget):**
             ```
             winget install starkSV.msdl
             ```
+
+            **Windows (direct download):** Download `msdl-windows-amd64.exe` below, rename to `msdl.exe`, place in a folder on your PATH.
 
             **Linux/macOS:**
             ```bash
@@ -57,14 +78,12 @@ jobs:
             chmod +x msdl && sudo mv msdl /usr/local/bin/
             ```
 
-            **Windows (manual):** Download `msdl-windows-amd64.exe`, rename to `msdl.exe`, place in a directory on your PATH.
-
             ## Usage
             ```
-            msdl                                              # fully interactive
+            msdl                                              # fully interactive (includes Server/Enterprise)
             msdl "windows 11 25h2"                            # filter products, pick language
             msdl --id 3262 --lang "English (United States)"  # direct, no prompts
-            msdl --eval server-2025                          # evaluation ISOs
+            msdl --eval server-2025                          # evaluation ISOs directly
             msdl --list                                       # list all products
             ```
 
