@@ -87,6 +87,28 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+func pickCombined() (isEval bool, p Product, ep EvalProduct, err error) {
+	total := len(consumerProducts) + len(evalProducts)
+	fmt.Fprintln(os.Stderr, "\nSelect a product:")
+	for i, prod := range consumerProducts {
+		fmt.Fprintf(os.Stderr, "  %2d. %s\n", i+1, prod.Name)
+	}
+	fmt.Fprintln(os.Stderr, "\n      ── Evaluation / Enterprise ──")
+	offset := len(consumerProducts)
+	for i, e := range evalProducts {
+		fmt.Fprintf(os.Stderr, "  %2d. %s\n", offset+i+1, e.Name)
+	}
+	fmt.Fprint(os.Stderr, "\nChoice: ")
+	n, err := parseChoice(os.Stdin, total)
+	if err != nil {
+		return false, Product{}, EvalProduct{}, err
+	}
+	if n <= offset {
+		return false, consumerProducts[n-1], EvalProduct{}, nil
+	}
+	return true, Product{}, evalProducts[n-offset-1], nil
+}
+
 func pickArchitecture(links []DownloadLink) (DownloadLink, error) {
 	fmt.Fprintln(os.Stderr, "Select architecture:")
 	for i, l := range links {
@@ -137,7 +159,11 @@ func copyToClipboard(text string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "clip")
+		clipExe := `C:\Windows\System32\clip.exe`
+		if sr := os.Getenv("SystemRoot"); sr != "" {
+			clipExe = sr + `\System32\clip.exe`
+		}
+		cmd = exec.Command(clipExe)
 	case "darwin":
 		cmd = exec.Command("pbcopy")
 	default:

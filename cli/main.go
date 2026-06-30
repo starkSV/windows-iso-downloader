@@ -245,13 +245,10 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 			return fmt.Errorf("unknown product ID %q — run msdl --list to see all products", productID)
 		}
 		product = p
-	} else {
-		candidates := consumerProducts
-		if query != "" {
-			candidates = searchProducts(query)
-			if len(candidates) == 0 {
-				return fmt.Errorf("no products match %q — run msdl --list to see all products", query)
-			}
+	} else if query != "" {
+		candidates := searchProducts(query)
+		if len(candidates) == 0 {
+			return fmt.Errorf("no products match %q — run msdl --list to see all products", query)
 		}
 		if len(candidates) == 1 {
 			product = candidates[0]
@@ -263,6 +260,15 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 				return err
 			}
 		}
+	} else {
+		isEval, selected, ep, err := pickCombined()
+		if err != nil {
+			return err
+		}
+		if isEval {
+			return runEval(ep.Slug)
+		}
+		product = selected
 	}
 
 	fmt.Fprintf(os.Stderr, "Setting up Microsoft session...\n")
