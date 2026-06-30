@@ -105,16 +105,32 @@ func pickArchitecture(links []DownloadLink) (DownloadLink, error) {
 }
 
 func openInBrowser(rawURL string) error {
-	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", rawURL)
+		// Write URL to a temp .url file (Windows Internet Shortcut format).
+		// The URL never touches cmd.exe — only the temp filename does, which
+		// contains no special characters.
+		f, err := os.CreateTemp("", "msdl-*.url")
+		if err != nil {
+			return err
+		}
+		name := f.Name()
+		defer os.Remove(name)
+		if _, err := fmt.Fprintf(f, "[InternetShortcut]\r\nURL=%s\r\n", rawURL); err != nil {
+			f.Close()
+			return err
+		}
+		f.Close()
+		cmdExe := os.Getenv("COMSPEC")
+		if cmdExe == "" {
+			cmdExe = `C:\Windows\System32\cmd.exe`
+		}
+		return exec.Command(cmdExe, "/c", "start", "", name).Run()
 	case "darwin":
-		cmd = exec.Command("open", rawURL)
+		return exec.Command("open", rawURL).Run()
 	default:
-		cmd = exec.Command("xdg-open", rawURL)
+		return exec.Command("xdg-open", rawURL).Run()
 	}
-	return cmd.Run()
 }
 
 func copyToClipboard(text string) error {
