@@ -1,5 +1,5 @@
 PackageIdentifier: starkSV.msdl
-PackageVersion: 0.3.0
+PackageVersion: 0.3.1
 Platform:
   - Windows.Desktop
 MinimumOSVersion: 10.0.0.0
@@ -8,7 +8,7 @@ Commands:
   - msdl
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv0.3.0/msdl-windows-amd64.exe
-    InstallerSha256: FA6DA7B905CFCAD52A0DAE884641055B00A831914F38E78F86F927DED51B0639
+    InstallerUrl: https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv0.3.1/msdl-windows-amd64.exe
+    InstallerSha256: A1EAB63420395C4E9572E588FFEA49E55A14ACA6403290282C841B8CFEBB7554
 ManifestType: installer
 ManifestVersion: 1.6.0
