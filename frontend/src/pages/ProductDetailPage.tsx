@@ -64,6 +64,7 @@ export default function ProductDetailPage() {
   const [expiryRemaining, setExpiryRemaining] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [linkStatus, setLinkStatus] = useState<'fresh' | 'cached' | 'stale' | null>(null)
+  const [isLockdown, setIsLockdown] = useState(false)
   const expiryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [meta, setMeta] = useState<{ badge: string; archs: string[]; active: boolean }>({ badge: '', archs: [], active: false })
@@ -199,17 +200,23 @@ export default function ProductDetailPage() {
     setLinkExpiry(null)
     setExpiryRemaining(null)
     setLinkStatus(null)
+    setIsLockdown(false)
     if (expiryTimerRef.current) clearInterval(expiryTimerRef.current)
 
     try {
       const r = await fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}`)
       const status = r.headers.get('X-MSDL-Link-Status') as 'fresh' | 'cached' | 'stale' | null
       const expiresHeader = r.headers.get('X-MSDL-Link-Expires')
+      const lockdownHeader = r.headers.get('X-MSDL-Lockdown')
       const data = await r.json()
-      if (data.error) throw new Error(data.error)
+      if (data.error) {
+        if (data.lockdown) setIsLockdown(true)
+        throw new Error(data.error)
+      }
       if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
       setDownloadLinks(data.ProductDownloadOptions)
       setLinkStatus(status)
+      if (lockdownHeader === '1') setIsLockdown(true)
       let expiry: Date | null = null
       if (expiresHeader) {
         const d = new Date(expiresHeader)
@@ -271,11 +278,17 @@ export default function ProductDetailPage() {
       const r = await fetch(`${API_BASE}/proxy?product_id=${productId}&sku_id=${selectedSku.Id}&force=true`)
       const status = r.headers.get('X-MSDL-Link-Status') as 'fresh' | 'cached' | 'stale' | null
       const expiresHeader = r.headers.get('X-MSDL-Link-Expires')
+      const lockdownHeader = r.headers.get('X-MSDL-Lockdown')
       const data = await r.json()
-      if (data.error) throw new Error(data.error)
+      if (data.error) {
+        if (data.lockdown) setIsLockdown(true)
+        throw new Error(data.error)
+      }
       if (!data.ProductDownloadOptions?.length) throw new Error('No download links returned.')
       setDownloadLinks(data.ProductDownloadOptions)
       setLinkStatus(status)
+      if (lockdownHeader === '1') setIsLockdown(true)
+      else setIsLockdown(false)
       let expiry: Date | null = null
       if (expiresHeader) {
         const d = new Date(expiresHeader)
@@ -531,7 +544,10 @@ export default function ProductDetailPage() {
                 >
                   <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/8 border border-red-500/15 text-red-400 text-sm">
                     <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
+                    <span>{isLockdown
+                      ? 'Our server has been temporarily blocked by Microsoft and is in a 90-minute cooldown. Use the CLI to get your link instantly — it bypasses our server entirely.'
+                      : error
+                    }</span>
                   </div>
                   {selectedSku && (
                     <CliHandoff
@@ -556,91 +572,141 @@ export default function ProductDetailPage() {
                   transition={{ type: 'spring', stiffness: 300, damping: 28 }}
                 >
                   <div className="pt-4 border-t border-white/6 space-y-3">
-                    {/* Stale warning */}
-                    {linkStatus === 'stale' && (
-                      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-amber-400">
-                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                        <p className="text-[12px] leading-relaxed">
-                          This link is cached and may have expired — Microsoft is currently limiting automated requests. Use the options below for a guaranteed fresh download.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Expiry row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className={`flex items-center gap-2 p-3 rounded-lg border text-[11px] flex-1 ${
-                        showRefresh
-                          ? 'bg-red-500/6 border-red-500/15 text-red-400/80'
-                          : 'bg-amber-500/6 border-amber-500/12 text-amber-400/80'
-                      }`}>
-                        <AlertTriangle size={12} className="flex-shrink-0" />
-                        {expiryRemaining !== null
-                          ? expiryRemaining <= 0
-                            ? 'Links expired — refresh to get new ones'
-                            : `Expires in ${formatRemaining(expiryRemaining)} · Direct from Microsoft CDN`
-                          : 'Links expire in 24 hours · Direct from Microsoft CDN'
-                        }
-                      </div>
-                      {showRefresh && (
-                        <button
-                          onClick={handleRefreshLinks}
-                          disabled={isRefreshing}
-                          className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-500/12 border border-blue-500/20 text-blue-400 text-[11px] font-medium hover:bg-blue-500/20 disabled:opacity-40 transition-all flex-shrink-0"
-                        >
-                          <motion.span
-                            animate={{ rotate: isRefreshing ? 360 : 0 }}
-                            transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
-                            className="inline-block"
-                          >
-                            <RefreshCw size={11} />
-                          </motion.span>
-                          Refresh
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Links */}
-                    {downloadLinks.map(link => {
-                      const filename = link.Uri.split('/').pop()?.split('?')[0] ?? 'download.iso'
-                      const arch = link.Architecture || archFromUri(link.Uri)
-                      const isCopied = copiedUri === link.Uri
-                      return (
-                        <div
-                          key={link.Uri}
-                          className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-white/3 border border-white/5 hover:border-white/9 transition-colors"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-mono text-white truncate">{filename}</p>
-                            <p className="text-[11px] text-zinc-600 mt-0.5">{arch}</p>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                    {linkStatus === 'stale' ? (
+                      /* Stale state: hide links, show banner + CLI recommendation */
+                      <>
+                        {isLockdown ? (
+                          /* Sentinel lockdown — no Refresh, no links, CLI only */
+                          <>
+                            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-red-500/8 border border-red-500/20 text-red-400">
+                              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                              <p className="text-[12px] leading-relaxed">
+                                Our server has been temporarily blocked by Microsoft and is in a 90-minute cooldown. Use the CLI to get your link instantly — it bypasses our server entirely.
+                              </p>
+                            </div>
+                            {selectedSku && (
+                              <CliHandoff
+                                productId={productId!}
+                                langName={selectedSku.Language}
+                                langDisplay={selectedSku.LocalizedLanguage}
+                                highlight
+                                defaultOpen
+                              />
+                            )}
+                          </>
+                        ) : (
+                          /* Normal stale — show warning, CLI, and Refresh */
+                          <>
+                            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-amber-400">
+                              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                              <p className="text-[12px] leading-relaxed">
+                                These links are cached and have expired — Microsoft is currently limiting automated requests.
+                              </p>
+                            </div>
+                            {selectedSku && (
+                              <CliHandoff
+                                productId={productId!}
+                                langName={selectedSku.Language}
+                                langDisplay={selectedSku.LocalizedLanguage}
+                                highlight
+                                defaultOpen
+                              />
+                            )}
                             <button
-                              onClick={() => handleCopy(link.Uri)}
-                              className="p-2 rounded-lg text-zinc-600 hover:text-white hover:bg-white/6 transition-all"
-                              title="Copy link"
+                              onClick={handleRefreshLinks}
+                              disabled={isRefreshing}
+                              className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/4 border border-white/8 text-zinc-400 text-[12px] font-medium hover:bg-white/7 disabled:opacity-40 transition-all"
                             >
-                              {isCopied
-                                ? <Check size={13} className="text-green-400" />
-                                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5" aria-hidden="true">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                  </svg>
-                              }
+                              <motion.span
+                                animate={{ rotate: isRefreshing ? 360 : 0 }}
+                                transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
+                                className="inline-block"
+                              >
+                                <RefreshCw size={12} />
+                              </motion.span>
+                              Try refreshing links
                             </button>
-                            <a
-                              href={link.Uri}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/12 border border-blue-500/20 text-blue-400 text-[11px] font-medium hover:bg-blue-500/20 transition-all"
-                            >
-                              <Download size={11} />
-                              {arch}
-                              <ExternalLink size={10} className="opacity-50" />
-                            </a>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      /* Fresh / cached state: show expiry row + links */
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className={`flex items-center gap-2 p-3 rounded-lg border text-[11px] flex-1 ${
+                            showRefresh
+                              ? 'bg-red-500/6 border-red-500/15 text-red-400/80'
+                              : 'bg-amber-500/6 border-amber-500/12 text-amber-400/80'
+                          }`}>
+                            <AlertTriangle size={12} className="flex-shrink-0" />
+                            {expiryRemaining !== null
+                              ? expiryRemaining <= 0
+                                ? 'Links expired — refresh to get new ones'
+                                : `Expires in ${formatRemaining(expiryRemaining)} · Direct from Microsoft CDN`
+                              : 'Links expire in 24 hours · Direct from Microsoft CDN'
+                            }
                           </div>
+                          {showRefresh && (
+                            <button
+                              onClick={handleRefreshLinks}
+                              disabled={isRefreshing}
+                              className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-500/12 border border-blue-500/20 text-blue-400 text-[11px] font-medium hover:bg-blue-500/20 disabled:opacity-40 transition-all flex-shrink-0"
+                            >
+                              <motion.span
+                                animate={{ rotate: isRefreshing ? 360 : 0 }}
+                                transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
+                                className="inline-block"
+                              >
+                                <RefreshCw size={11} />
+                              </motion.span>
+                              Refresh
+                            </button>
+                          )}
                         </div>
-                      )
-                    })}
+
+                        {downloadLinks.map(link => {
+                          const filename = link.Uri.split('/').pop()?.split('?')[0] ?? 'download.iso'
+                          const arch = link.Architecture || archFromUri(link.Uri)
+                          const isCopied = copiedUri === link.Uri
+                          return (
+                            <div
+                              key={link.Uri}
+                              className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-white/3 border border-white/5 hover:border-white/9 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-[12px] font-mono text-white truncate">{filename}</p>
+                                <p className="text-[11px] text-zinc-600 mt-0.5">{arch}</p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  onClick={() => handleCopy(link.Uri)}
+                                  className="p-2 rounded-lg text-zinc-600 hover:text-white hover:bg-white/6 transition-all"
+                                  title="Copy link"
+                                >
+                                  {isCopied
+                                    ? <Check size={13} className="text-green-400" />
+                                    : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-3.5 h-3.5" aria-hidden="true">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                      </svg>
+                                  }
+                                </button>
+                                <a
+                                  href={link.Uri}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/12 border border-blue-500/20 text-blue-400 text-[11px] font-medium hover:bg-blue-500/20 transition-all"
+                                >
+                                  <Download size={11} />
+                                  {arch}
+                                  <ExternalLink size={10} className="opacity-50" />
+                                </a>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -656,8 +722,8 @@ export default function ProductDetailPage() {
                     productId={productId!}
                     languageName={selectedSku?.LocalizedLanguage ?? ''}
                   />
-                  {/* Collapsed CLI only when highlighted card isn't already shown inside the card */}
-                  {!(error !== null && languages.length > 0) && (
+                  {/* Skip outer CLI card when already shown inside the main card (any stale or error) */}
+                  {linkStatus !== 'stale' && !(error !== null && languages.length > 0) && (
                     selectedSku ? (
                       <CliHandoff
                         productId={productId!}
