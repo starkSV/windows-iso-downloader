@@ -579,6 +579,7 @@ type telemetryPayload struct {
 	Platform  string `json:"platform"`
 	Version   string `json:"version"`
 	Success   bool   `json:"success"`
+	Error     string `json:"error"`
 }
 
 // --- Evalcenter helpers ---
@@ -1662,6 +1663,9 @@ func handleTelemetry(w http.ResponseWriter, r *http.Request) {
 			result = "failed"
 		}
 		rdb.HIncrBy(ctx, "msdl:telemetry:results", result, 1)
+		if !p.Success && p.Error != "" && len(p.Error) <= 200 {
+			rdb.HIncrBy(ctx, "msdl:telemetry:errors", p.Error, 1)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -1695,6 +1699,7 @@ func loadTelemetryFromRedis() map[string]map[string]string {
 		"msdl:telemetry:versions",
 		"msdl:telemetry:products",
 		"msdl:telemetry:results",
+		"msdl:telemetry:errors",
 	}
 	out := make(map[string]map[string]string, len(keys))
 	for _, k := range keys {
