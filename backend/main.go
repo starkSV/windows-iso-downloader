@@ -1199,10 +1199,20 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		staleEntry, hasStale := linkCache[cacheKey]
 		linkCacheMu.RUnlock()
 		if hasStale {
-			atomic.AddInt64(&mLinkStale, 1)
-			log.Printf("/proxy: product_id=%s sku_id=%s -> lockdown active, serving stale (expires %s)\n",
-				productID, skuID, lockdownEntry.ExpiresAt.Format(time.RFC3339))
-			w.Header().Set("X-MSDL-Link-Status", "stale")
+			if time.Now().Before(staleEntry.ExpiresAt) {
+				// Entry is still within its normal TTL (e.g. just contributed by
+				// a CLI run) — genuinely fresh, not actually stale, just being
+				// served via the lockdown gate before the usual cache check.
+				atomic.AddInt64(&mLinkCacheHits, 1)
+				log.Printf("/proxy: product_id=%s sku_id=%s -> lockdown active, serving cached (expires %s)\n",
+					productID, skuID, staleEntry.ExpiresAt.Format(time.RFC3339))
+				w.Header().Set("X-MSDL-Link-Status", "cached")
+			} else {
+				atomic.AddInt64(&mLinkStale, 1)
+				log.Printf("/proxy: product_id=%s sku_id=%s -> lockdown active, serving stale (expires %s)\n",
+					productID, skuID, lockdownEntry.ExpiresAt.Format(time.RFC3339))
+				w.Header().Set("X-MSDL-Link-Status", "stale")
+			}
 			if exp := extractRawExpiry(staleEntry.RawJSON); exp != "" {
 				w.Header().Set("X-MSDL-Link-Expires", exp)
 			}
