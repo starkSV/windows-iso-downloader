@@ -87,6 +87,20 @@ type cliTelemetryPayload struct {
 	Platform  string `json:"platform"`
 	Version   string `json:"version"`
 	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
+}
+
+// truncateError caps an error string for telemetry (avoids leaking huge bodies,
+// keeps Redis field values small).
+func truncateError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+	if len(s) > 150 {
+		s = s[:150]
+	}
+	return s
 }
 
 // sendTelemetry posts a single telemetry event. Fire-and-forget: all errors
@@ -243,6 +257,7 @@ More info: https://msdl.tech-latest.com/cli`)
 			Platform:  runtime.GOOS,
 			Version:   Version,
 			Success:   err == nil,
+			Error:     truncateError(err),
 		})
 	}
 
