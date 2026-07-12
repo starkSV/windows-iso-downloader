@@ -39,7 +39,7 @@ const (
 	CUSTOMER_ID = "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
 	PORT        = ":3002"
 
-	latestCLIVersion = "0.3.2"
+	latestCLIVersion = "0.3.3"
 )
 
 // --- Session cache (short-lived, used to chain /skuinfo → /proxy) ---
