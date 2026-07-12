@@ -91,16 +91,23 @@ type cliTelemetryPayload struct {
 }
 
 // truncateError caps an error string for telemetry (avoids leaking huge bodies,
-// keeps Redis field values small).
+// keeps Redis field values small). Keeps both head and tail: the head usually
+// names what failed (e.g. "language X not available for Y"), while wrapped
+// errors put the root cause last (e.g. "fetching X: <root cause>") — a long
+// middle section (URLs, option lists) is the least useful part to keep.
 func truncateError(err error) string {
 	if err == nil {
 		return ""
 	}
 	s := err.Error()
-	if len(s) > 150 {
-		s = s[:150]
+	const max = 150
+	if len(s) <= max {
+		return s
 	}
-	return s
+	const headLen = 60
+	const sep = " ... "
+	tailLen := max - headLen - len(sep)
+	return s[:headLen] + sep + s[len(s)-tailLen:]
 }
 
 // sendTelemetry posts a single telemetry event. Fire-and-forget: all errors
@@ -161,6 +168,8 @@ Usage:
   msdl [search terms]                           interactive: filter + pick product, pick language
   msdl --id 3262                                skip product picker
   msdl --id 3262 --lang "English (United States)"  no prompts, print URL directly
+                                                 (language names vary by product — omit --lang
+                                                 or check the error's "available" list to see them)
   msdl --eval [slug]                            evaluation ISOs (server-2025, win11-ent, ...)
   msdl --list                                   list all products and exit
 
@@ -310,7 +319,11 @@ func runConsumer(productID, query, langName string, noContribute bool) error {
 			}
 		}
 		if lang.ID == "" {
-			return fmt.Errorf("language %q not available for %s", langName, product.Name)
+			names := make([]string, len(langs))
+			for i, l := range langs {
+				names[i] = l.Language
+			}
+			return fmt.Errorf("language %q not available for %s — available: %s", langName, product.Name, strings.Join(names, ", "))
 		}
 	} else {
 		lang, err = pickLanguage(langs)
