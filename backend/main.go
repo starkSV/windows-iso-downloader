@@ -1675,6 +1675,20 @@ func handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		rdb.HIncrBy(ctx, "msdl:telemetry:results", result, 1)
 		if !p.Success && p.Error != "" && len(p.Error) <= 200 {
 			rdb.HIncrBy(ctx, "msdl:telemetry:errors", p.Error, 1)
+			if strings.Contains(p.Error, "Sentinel") {
+				// Track today's Sentinel-rejection count and an approximate
+				// distinct-source count (via HyperLogLog on the reporting
+				// IP) so /metrics can show whether rejections are
+				// concentrated in a few sources or spread across many,
+				// without ever storing raw IPs.
+				day := time.Now().UTC().Format("2006-01-02")
+				countKey := "msdl:telemetry:sentinel_count:" + day
+				hllKey := "msdl:telemetry:sentinel_hll:" + day
+				rdb.Incr(ctx, countKey)
+				rdb.Expire(ctx, countKey, 48*time.Hour)
+				rdb.PFAdd(ctx, hllKey, ip)
+				rdb.Expire(ctx, hllKey, 48*time.Hour)
+			}
 		}
 	}
 
@@ -1775,6 +1789,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	evalCacheMu.RUnlock()
 
 	telemetry := loadTelemetryFromRedis()
+	sentinelToday := loadSentinelTodayFromRedis()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1805,7 +1820,27 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		"neg_cache_size":   negSize,
 		"total_ms_fetches": skuFetches + linkFetches,
 		"telemetry":        telemetry,
+		"sentinel_today":   sentinelToday,
 	})
+}
+
+// loadSentinelTodayFromRedis returns today's Sentinel-rejection count and an
+// approximate distinct-source count (from the HyperLogLog seeded in
+// handleTelemetry). Returns nil when Redis is unavailable.
+func loadSentinelTodayFromRedis() map[string]interface{} {
+	if rdb == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	day := time.Now().UTC().Format("2006-01-02")
+	count, _ := rdb.Get(ctx, "msdl:telemetry:sentinel_count:"+day).Int64()
+	distinct, _ := rdb.PFCount(ctx, "msdl:telemetry:sentinel_hll:"+day).Result()
+	return map[string]interface{}{
+		"date":                 day,
+		"errors_today":         count,
+		"distinct_sources_est": distinct,
+	}
 }
 
 func warmEvalCache() {
