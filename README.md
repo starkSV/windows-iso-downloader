@@ -343,18 +343,7 @@ Recommended setup:
 
 ## Contributing
 
-Pull requests welcome. To add a new consumer Windows release:
-
-1. Find the product ID on `www.microsoft.com/software-download-connector/api/`
-2. Add it to `frontend/public/data/products.json` (name, archs, badge, related, active)
-3. Update the product table in this README
-
-To add a new evaluation edition:
-
-1. Find the fwlink URL on `microsoft.com/en-us/evalcenter/download-*`
-2. Add the slug and fwlink to the `evalProducts` map in `backend/main.go`
-3. Add the product config to `frontend/src/data/evalProducts.ts`
-4. Update the eval table in this README
+Pull requests welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for dev setup, how to add products/eval editions, and PR conventions.
 
 ---
 
