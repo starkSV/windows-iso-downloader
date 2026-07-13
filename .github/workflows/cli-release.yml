@@ -90,7 +90,7 @@ jobs:
             ```
             msdl                                              # fully interactive (includes Server/Enterprise)
             msdl "windows 11 25h2"                            # filter products, pick language
-            msdl --id 3262 --lang "English (United States)"  # direct, no prompts
+            msdl --id 3262 --lang "English"                   # direct, no prompts
             msdl --eval server-2025                          # evaluation ISOs directly
             msdl --list                                       # list all products
             ```

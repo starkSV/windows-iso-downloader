@@ -60,7 +60,7 @@ func searchProducts(query string) []Product {
 		name := strings.ToLower(p.Name)
 		match := true
 		for _, w := range words {
-			if !strings.Contains(name, w) {
+			if !containsWordStart(name, w) {
 				match = false
 				break
 			}
@@ -70,6 +70,31 @@ func searchProducts(query string) []Product {
 		}
 	}
 	return results
+}
+
+// containsWordStart reports whether s contains substr starting at a word
+// boundary: the start of s, or right after a non-alphanumeric character.
+// Plain strings.Contains would let a query word match a digit fragment
+// buried inside an unrelated number -- e.g. "10" matching inside a build
+// number like "26100.1742" -- which made "windows 10" incorrectly return
+// Windows 11 24H2 results.
+func containsWordStart(s, substr string) bool {
+	from := 0
+	for {
+		i := strings.Index(s[from:], substr)
+		if i < 0 {
+			return false
+		}
+		pos := from + i
+		if pos == 0 || !isAlphanumeric(s[pos-1]) {
+			return true
+		}
+		from = pos + 1
+	}
+}
+
+func isAlphanumeric(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
 }
 
 func findEvalProduct(slug string) (EvalProduct, bool) {
