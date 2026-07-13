@@ -1,0 +1,16 @@
+pkgbase = msdl-bin
+	pkgdesc = Download Windows ISO files directly from Microsoft's servers
+	pkgver = 0.3.5
+	pkgrel = 1
+	url = https://msdl.tech-latest.com
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	provides = msdl
+	conflicts = msdl
+	source_x86_64 = msdl-bin-0.3.5-x86_64::https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv0.3.5/msdl-linux-amd64
+	sha256sums_x86_64 = dfb0648acd6caa79d597839bb9803c979446a2d77f90447273ee5003d8857c9d
+	source_aarch64 = msdl-bin-0.3.5-aarch64::https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv0.3.5/msdl-linux-arm64
+	sha256sums_aarch64 = 933beb694b3e59fc84cdccfb5cb3dfe48db3274046df88390cf8ee32070f4088
+
+pkgname = msdl-bin
