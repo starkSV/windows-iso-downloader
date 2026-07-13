@@ -114,7 +114,6 @@ export default function CliPage() {
                 <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-600 font-mono">recommended</span>
               </div>
               <CodeBlock code="brew tap starkSV/msdl && brew install msdl-cli" />
-              <p className="text-[11px] text-zinc-600">Formula is <code className="text-zinc-500">msdl-cli</code>, not <code className="text-zinc-500">msdl</code> — homebrew/core has an unrelated package named msdl. The installed command is still just <code className="text-zinc-500">msdl</code>.</p>
             </div>
 
             {/* No Homebrew — curl installer */}
