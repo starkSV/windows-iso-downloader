@@ -69,6 +69,12 @@ brew tap starkSV/msdl
 brew install msdl
 ```
 
+**macOS / Linux (no Homebrew):**
+```bash
+curl -fsSL https://api.msdl.tech-latest.com/install.sh | bash
+```
+Auto-detects OS/arch (including Termux on Android) and installs the latest release.
+
 **Direct download:** Grab the latest binary from [GitHub Releases](https://github.com/starkSV/windows-iso-downloader/releases/latest) and rename it:
 
 | Platform | File | Rename to |

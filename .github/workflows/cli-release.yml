@@ -73,6 +73,12 @@ jobs:
             brew install msdl
             ```
 
+            **macOS/Linux (no Homebrew):**
+            ```bash
+            curl -fsSL https://api.msdl.tech-latest.com/install.sh | bash
+            ```
+            Auto-detects OS/arch (including Termux on Android) and installs the latest release.
+
             **Linux/macOS (direct download):**
             ```bash
             # Linux x86_64
