@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -26,6 +27,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 )
+
+//go:embed install.sh
+var installScript []byte
 
 // Package-level rand source — avoids global mutex contention under concurrent load.
 // Go 1.20+ auto-seeds the global rand, but a local source is faster at high QPS.
@@ -1701,6 +1705,20 @@ func handleCLIVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"latest": latestCLIVersion})
 }
 
+// --- /install.sh endpoint ---
+
+// handleInstallScript serves the Linux/macOS install script embedded at
+// build time from install.sh. Auto-detects OS/arch and always resolves the
+// latest GitHub release, so it needs no per-release maintenance.
+func handleInstallScript(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-sh; charset=utf-8")
+	w.Write(installScript)
+}
+
 // --- /metrics endpoint ---
 
 // loadTelemetryFromRedis reads all telemetry counters from Redis.
@@ -1865,6 +1883,7 @@ func main() {
 	mux.HandleFunc("/metrics", handleMetrics)
 	mux.HandleFunc("/telemetry", handleTelemetry)
 	mux.HandleFunc("/cli/version", handleCLIVersion)
+	mux.HandleFunc("/install.sh", handleInstallScript)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))

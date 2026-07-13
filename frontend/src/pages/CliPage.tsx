@@ -116,6 +116,12 @@ export default function CliPage() {
               <CodeBlock code="brew tap starkSV/msdl && brew install msdl" />
             </div>
 
+            {/* No Homebrew — curl installer */}
+            <div className="rounded-xl border border-white/7 bg-[#111113] p-4 space-y-2">
+              <p className="text-[12px] text-zinc-400">No Homebrew? One-line installer (auto-detects OS/arch, incl. Termux):</p>
+              <CodeBlock code="curl -fsSL https://api.msdl.tech-latest.com/install.sh | bash" />
+            </div>
+
             {/* Manual / other platforms */}
             <div className="rounded-xl border border-white/7 bg-[#111113] p-4 space-y-3">
               <div className="flex items-center justify-between">

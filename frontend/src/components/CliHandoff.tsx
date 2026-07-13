@@ -16,6 +16,7 @@ const RELEASES_URL = 'https://minxl.ink/msdl-github-release'
 function InstallSteps() {
   const [copied, setCopied] = useState(false)
   const [brewCopied, setBrewCopied] = useState(false)
+  const [curlCopied, setCurlCopied] = useState(false)
 
   function handleCopy() {
     navigator.clipboard.writeText('winget install starkSV.msdl')
@@ -27,6 +28,12 @@ function InstallSteps() {
     navigator.clipboard.writeText('brew tap starkSV/msdl && brew install msdl')
     setBrewCopied(true)
     setTimeout(() => setBrewCopied(false), 2000)
+  }
+
+  function handleCurlCopy() {
+    navigator.clipboard.writeText('curl -fsSL https://api.msdl.tech-latest.com/install.sh | bash')
+    setCurlCopied(true)
+    setTimeout(() => setCurlCopied(false), 2000)
   }
 
   return (
@@ -55,6 +62,12 @@ function InstallSteps() {
             {brewCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
           </button>
         </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-white/4 border border-white/7 px-3 py-2">
+        <code className="text-[11px] font-mono text-zinc-400 truncate">curl -fsSL .../install.sh | bash</code>
+        <button onClick={handleCurlCopy} className="flex-shrink-0 text-zinc-500 hover:text-white transition-colors">
+          {curlCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+        </button>
       </div>
       <a
         href={RELEASES_URL}

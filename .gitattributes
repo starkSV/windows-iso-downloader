@@ -1,2 +1,3 @@
 aur/msdl-bin/PKGBUILD text eol=lf
 aur/msdl-bin/.SRCINFO text eol=lf
+backend/install.sh text eol=lf
