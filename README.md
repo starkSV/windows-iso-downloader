@@ -66,8 +66,9 @@ winget install starkSV.msdl
 **macOS / Linux (Homebrew):**
 ```bash
 brew tap starkSV/msdl
-brew install msdl
+brew install msdl-cli
 ```
+(the formula is named `msdl-cli`, not `msdl` — `homebrew/core` already has an unrelated package called `msdl`; the installed command is still just `msdl`)
 
 **macOS / Linux (no Homebrew):**
 ```bash
