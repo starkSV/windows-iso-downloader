@@ -70,8 +70,9 @@ jobs:
             **macOS/Linux (Homebrew):**
             ```bash
             brew tap starkSV/msdl
-            brew install msdl
+            brew install msdl-cli
             ```
+            (formula is `msdl-cli`, not `msdl` -- homebrew/core has an unrelated package named `msdl`; the installed command is still just `msdl`)
 
             **macOS/Linux (no Homebrew):**
             ```bash
