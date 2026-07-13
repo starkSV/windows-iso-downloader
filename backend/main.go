@@ -937,7 +937,6 @@ func fetchDownloadLinksFromMS(productID, skuID string) ([]byte, error) {
 		jar = &simpleCookieJar{}
 	}
 
-
 	proxyQ := url.Values{}
 	proxyQ.Set("profile", PROFILE)
 	proxyQ.Set("productEditionId", "undefined")
@@ -1675,6 +1674,15 @@ func handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		rdb.HIncrBy(ctx, "msdl:telemetry:results", result, 1)
 		if !p.Success && p.Error != "" && len(p.Error) <= 200 {
 			rdb.HIncrBy(ctx, "msdl:telemetry:errors", p.Error, 1)
+			if strings.Contains(p.Error, "Sentinel") {
+				// All-time Sentinel-rejection count, plus an approximate
+				// distinct-source count (via HyperLogLog on the reporting
+				// IP) so /metrics can show whether rejections are
+				// concentrated in a few sources or spread across many,
+				// without ever storing raw IPs.
+				rdb.Incr(ctx, "msdl:telemetry:sentinel_count")
+				rdb.PFAdd(ctx, "msdl:telemetry:sentinel_hll", ip)
+			}
 		}
 	}
 
@@ -1775,6 +1783,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	evalCacheMu.RUnlock()
 
 	telemetry := loadTelemetryFromRedis()
+	sentinelErrors, sentinelDistinctSources := loadSentinelStatsFromRedis()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1802,10 +1811,26 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"hit_rate":   hitRate(evalHits, evalReqs),
 			"cache_size": evalSize,
 		},
-		"neg_cache_size":   negSize,
-		"total_ms_fetches": skuFetches + linkFetches,
-		"telemetry":        telemetry,
+		"neg_cache_size":                negSize,
+		"total_ms_fetches":              skuFetches + linkFetches,
+		"telemetry":                     telemetry,
+		"sentinel_errors":               sentinelErrors,
+		"sentinel_distinct_sources_est": sentinelDistinctSources,
 	})
+}
+
+// loadSentinelStatsFromRedis returns the all-time Sentinel-rejection count
+// and an approximate distinct-source count (from the HyperLogLog seeded in
+// handleTelemetry). Returns (0, 0) when Redis is unavailable.
+func loadSentinelStatsFromRedis() (int64, int64) {
+	if rdb == nil {
+		return 0, 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	count, _ := rdb.Get(ctx, "msdl:telemetry:sentinel_count").Int64()
+	distinct, _ := rdb.PFCount(ctx, "msdl:telemetry:sentinel_hll").Result()
+	return count, distinct
 }
 
 func warmEvalCache() {
