@@ -26,6 +26,7 @@ jobs:
           VERSION="${VERSION#cli/v}"
           mkdir -p ../dist
           GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-linux-amd64   .
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-linux-arm64   .
           GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-darwin-amd64  .
           GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-darwin-arm64  .
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o ../dist/msdl-windows-amd64.exe .
@@ -68,6 +69,10 @@ jobs:
             # Linux x86_64
             curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-linux-amd64 -o msdl
             chmod +x msdl && sudo mv msdl /usr/local/bin/
+
+            # Linux ARM64 (also works in Termux on Android)
+            curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-linux-arm64 -o msdl
+            chmod +x msdl && mv msdl $PREFIX/bin/ 2>/dev/null || sudo mv msdl /usr/local/bin/
 
             # macOS Apple Silicon
             curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-darwin-arm64 -o msdl
