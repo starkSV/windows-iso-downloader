@@ -36,7 +36,10 @@ jobs:
         run: |
           PREV_TAG=$(git tag --sort=-version:refname | grep 'cli/v' | sed -n '2p')
           if [ -n "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s" "$PREV_TAG".."${{ github.ref_name }}" -- cli/ backend/ frontend/ | grep -v '^- chore(winget)' | head -30)
+            CHANGELOG=$(git log --pretty=format:"- %s" "$PREV_TAG".."${{ github.ref_name }}" -- cli/ backend/ frontend/ .github/workflows/cli-release.yml | grep -v '^- chore(winget)' | grep -v '^- chore(release): bump' | head -30)
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="- Maintenance release (see commit history for details)"
+            fi
           else
             CHANGELOG="- Initial release"
           fi
