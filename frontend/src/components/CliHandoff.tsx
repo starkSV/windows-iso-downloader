@@ -15,11 +15,18 @@ const RELEASES_URL = 'https://minxl.ink/msdl-github-release'
 
 function InstallSteps() {
   const [copied, setCopied] = useState(false)
+  const [brewCopied, setBrewCopied] = useState(false)
 
   function handleCopy() {
     navigator.clipboard.writeText('winget install starkSV.msdl')
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleBrewCopy() {
+    navigator.clipboard.writeText('brew tap starkSV/msdl && brew install msdl')
+    setBrewCopied(true)
+    setTimeout(() => setBrewCopied(false), 2000)
   }
 
   return (
@@ -34,6 +41,18 @@ function InstallSteps() {
           <code className="text-[12px] font-mono text-zinc-300">winget install starkSV.msdl</code>
           <button onClick={handleCopy} className="flex-shrink-0 text-zinc-500 hover:text-white transition-colors">
             {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+          </button>
+        </div>
+      </div>
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-mono font-semibold tracking-widest uppercase text-emerald-500">macOS / Linux · Homebrew</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-600 font-mono">recommended</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 rounded bg-black/30 px-3 py-2">
+          <code className="text-[12px] font-mono text-zinc-300">brew tap starkSV/msdl && brew install msdl</code>
+          <button onClick={handleBrewCopy} className="flex-shrink-0 text-zinc-500 hover:text-white transition-colors">
+            {brewCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
           </button>
         </div>
       </div>

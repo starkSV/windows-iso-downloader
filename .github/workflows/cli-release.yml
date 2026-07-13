@@ -67,7 +67,13 @@ jobs:
 
             **Windows (direct download):** Download `msdl-windows-amd64.exe` below, rename to `msdl.exe`, place in a folder on your PATH.
 
-            **Linux/macOS:**
+            **macOS/Linux (Homebrew):**
+            ```bash
+            brew tap starkSV/msdl
+            brew install msdl
+            ```
+
+            **Linux/macOS (direct download):**
             ```bash
             # Linux x86_64
             curl -L https://github.com/starkSV/windows-iso-downloader/releases/download/${{ github.ref_name }}/msdl-linux-amd64 -o msdl

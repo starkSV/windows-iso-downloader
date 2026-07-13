@@ -107,6 +107,15 @@ export default function CliPage() {
               <CodeBlock code="winget install starkSV.msdl" />
             </div>
 
+            {/* Homebrew — macOS/Linux primary */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono font-semibold tracking-widest uppercase text-emerald-500">macOS / Linux · Homebrew</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-600 font-mono">recommended</span>
+              </div>
+              <CodeBlock code="brew tap starkSV/msdl && brew install msdl" />
+            </div>
+
             {/* Manual / other platforms */}
             <div className="rounded-xl border border-white/7 bg-[#111113] p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -128,7 +137,8 @@ export default function CliPage() {
                   { os: 'Windows (manual)', file: 'msdl-windows-amd64.exe', rename: 'msdl.exe' },
                   { os: 'macOS (Apple Silicon)', file: 'msdl-darwin-arm64', rename: 'msdl' },
                   { os: 'macOS (Intel)', file: 'msdl-darwin-amd64', rename: 'msdl' },
-                  { os: 'Linux', file: 'msdl-linux-amd64', rename: 'msdl' },
+                  { os: 'Linux (x86_64)', file: 'msdl-linux-amd64', rename: 'msdl' },
+                  { os: 'Linux (ARM64 / Termux)', file: 'msdl-linux-arm64', rename: 'msdl' },
                 ].map(p => (
                   <div key={p.os} className="px-3 py-2.5 rounded-lg bg-white/3 border border-white/5 space-y-1">
                     <p className="text-zinc-500">{p.os}</p>

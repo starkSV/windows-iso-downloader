@@ -58,16 +58,28 @@ msdl --list
 
 ### Install
 
-Download the latest binary from [GitHub Releases](https://github.com/starkSV/windows-iso-downloader/releases/latest) and rename it:
+**Windows (winget):**
+```
+winget install starkSV.msdl
+```
+
+**macOS / Linux (Homebrew):**
+```bash
+brew tap starkSV/msdl
+brew install msdl
+```
+
+**Direct download:** Grab the latest binary from [GitHub Releases](https://github.com/starkSV/windows-iso-downloader/releases/latest) and rename it:
 
 | Platform | File | Rename to |
 |---|---|---|
 | Windows | `msdl-windows-amd64.exe` | `msdl.exe` |
 | macOS (Apple Silicon) | `msdl-darwin-arm64` | `msdl` |
 | macOS (Intel) | `msdl-darwin-amd64` | `msdl` |
-| Linux | `msdl-linux-amd64` | `msdl` |
+| Linux (x86_64) | `msdl-linux-amd64` | `msdl` |
+| Linux (ARM64, incl. Termux on Android) | `msdl-linux-arm64` | `msdl` |
 
-winget support is in progress: `winget install starkSV.msdl` (pending package review).
+An AUR package (`msdl-bin`) is prepared but not yet published — Arch Linux disabled new AUR registrations after a [malware incident](https://itsfoss.com/news/arch-linux-aur-malware-flood/); see [`aur/msdl-bin`](./aur/msdl-bin) for status.
 
 ### Crowdsourced cache
 
