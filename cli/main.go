@@ -46,9 +46,9 @@ func contributeURL() string {
 	return apiBaseURL() + "/contribute"
 }
 
-// printUpdateNotice checks /cli/version and prints a notice if a newer version
-// is available. Blocks up to 500ms; silently no-ops on timeout or any error.
-func printUpdateNotice() {
+// fetchLatestVersion fetches /cli/version and returns the latest version
+// string, or "" on any error or after a 500ms timeout.
+func fetchLatestVersion() string {
 	ch := make(chan string, 1)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -72,11 +72,18 @@ func printUpdateNotice() {
 	}()
 	select {
 	case latest := <-ch:
-		if latest != "" && latest != Version && Version != "dev" {
-			fmt.Fprintf(os.Stderr, "\n  A new version of msdl is available: v%s\n", latest)
-			fmt.Fprintf(os.Stderr, "  Download: https://github.com/starkSV/windows-iso-downloader/releases/latest\n\n")
-		}
+		return latest
 	case <-time.After(500 * time.Millisecond):
+		return ""
+	}
+}
+
+// printUpdateNotice prints a notice if latest is newer than the running
+// binary's version.
+func printUpdateNotice(latest string) {
+	if latest != "" && latest != Version && Version != "dev" {
+		fmt.Fprintf(os.Stderr, "\n  A new version of msdl is available: v%s\n", latest)
+		fmt.Fprintf(os.Stderr, "  Download: https://github.com/starkSV/windows-iso-downloader/releases/latest\n\n")
 	}
 }
 
@@ -199,10 +206,17 @@ More info: https://msdl.tech-latest.com/cli`)
 	query := strings.Join(fs.Args(), " ")
 	noContribute := *noContributeFlag || os.Getenv("MSDL_NO_CONTRIBUTE") == "1"
 	noTelemetry := os.Getenv("MSDL_NO_TELEMETRY") == "1"
+	isHomepage := *productID == "" && !*evalMode && !*listMode && query == "" && isTerminal()
 
-	// Update check — blocks up to 500ms, then continues regardless
+	// Update check — blocks up to 500ms, then continues regardless. The
+	// homepage screen folds this into its own footer instead of printing a
+	// separate notice.
+	latest := ""
 	if !noTelemetry {
-		printUpdateNotice()
+		latest = fetchLatestVersion()
+		if !isHomepage {
+			printUpdateNotice(latest)
+		}
 	}
 
 	if *listMode {
@@ -239,20 +253,37 @@ More info: https://msdl.tech-latest.com/cli`)
 		telAction = "fetch"
 		telProductID = *productID
 		err = runConsumer(*productID, query, *langFlag, noContribute)
-	case query == "" && isTerminal():
-		// Pure interactive: combined consumer + eval picker
-		isEval, product, ep, pickErr := pickCombined()
-		if pickErr != nil {
-			return pickErr
+	case isHomepage:
+		choice, hpErr := showHomepage(latest)
+		if hpErr != nil {
+			return hpErr
 		}
-		if isEval {
-			telAction = "eval"
-			telEvalSlug = ep.Slug
-			err = runEval(ep.Slug)
-		} else {
+		switch choice.kind {
+		case homepageKindProduct:
 			telAction = "fetch"
-			telProductID = product.ID
-			err = runConsumer(product.ID, "", *langFlag, noContribute)
+			telProductID = choice.productID
+			err = runConsumer(choice.productID, "", *langFlag, noContribute)
+		case homepageKindEval:
+			telAction = "eval"
+			telEvalSlug = choice.evalSlug
+			err = runEval(choice.evalSlug)
+		case homepageKindSearch:
+			telAction = "fetch"
+			err = runConsumer("", choice.query, *langFlag, noContribute)
+		case homepageKindList:
+			isEval, product, ep, pickErr := pickCombined()
+			if pickErr != nil {
+				return pickErr
+			}
+			if isEval {
+				telAction = "eval"
+				telEvalSlug = ep.Slug
+				err = runEval(ep.Slug)
+			} else {
+				telAction = "fetch"
+				telProductID = product.ID
+				err = runConsumer(product.ID, "", *langFlag, noContribute)
+			}
 		}
 	default:
 		err = runConsumer(*productID, query, *langFlag, noContribute)
