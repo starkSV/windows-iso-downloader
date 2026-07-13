@@ -46,7 +46,9 @@ go test ./...
 
 ## CLI releases
 
-CLI releases are cut by the maintainer via git tag (`cli/vX.Y.Z`), which triggers the GitHub Actions build for all platforms and the winget package update. Contributors don't need to worry about tagging, versioning, or winget — just get the fix or feature merged to `main`.
+CLI releases are cut by the maintainer via git tag (`cli/vX.Y.Z`), which triggers the GitHub Actions build for all platforms. Contributors don't need to worry about tagging or versioning — just get the fix or feature merged to `main`.
+
+Package manager updates (winget, the [Homebrew tap](https://github.com/starkSV/homebrew-msdl), and the [`msdl-bin` AUR package](./aur/msdl-bin)) are submitted manually by the maintainer after each release, not automated in CI.
 
 ## Code style
 
