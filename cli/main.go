@@ -167,7 +167,7 @@ func run(args []string) error {
 Usage:
   msdl [search terms]                           interactive: filter + pick product, pick language
   msdl --id 3262                                skip product picker
-  msdl --id 3262 --lang "English (United States)"  no prompts, print URL directly
+  msdl --id 3262 --lang "English"               no prompts, print URL directly
                                                  (language names vary by product — omit --lang
                                                  or check the error's "available" list to see them)
   msdl --eval [slug]                            evaluation ISOs (server-2025, win11-ent, ...)
@@ -185,7 +185,7 @@ More info: https://msdl.tech-latest.com/cli`)
 	}
 
 	productID := fs.String("id", "", "consumer product ID (skips product picker)")
-	langFlag := fs.String("lang", "", `language name, e.g. "English (United States)"`)
+	langFlag := fs.String("lang", "", `language name, e.g. "English"`)
 	evalMode := fs.Bool("eval", false, "fetch evaluation ISOs")
 	listMode := fs.Bool("list", false, "list all products and exit")
 	noContributeFlag := fs.Bool("no-contribute", false, "skip sharing the link with the msdl.tech cache")
