@@ -2,6 +2,44 @@
 
 ## Shipped
 
+### CLI + resilience architecture (formerly `IMPLEMENTATION_PLAN.md`, Phases 1–5) — merged
+
+Microsoft's Azure Sentinel WAF started blocking the backend's data-center IP (Hetzner) on
+the link endpoint. Rather than fight it server-side, inverted the network footprint: the
+CLI now talks to Microsoft directly from the user's own residential IP, and feeds fresh
+links back into the shared backend cache.
+
+- **`msdl` CLI (`cli/`)** — standalone Go binary, ports the full Microsoft session flow
+  (`cli/microsoft.go`: vlscppe permit → ov-df fingerprint → SKU lookup → signed link fetch)
+  so requests originate from the user's machine, not a blockable ASN. Also scrapes the
+  Eval Center directly for eval builds — no backend dependency either way.
+- **Crowdsourced cache contribution** — after a successful CLI fetch, the raw Microsoft
+  response is POSTed to the backend's `POST /contribute` (validated against a product
+  allow-list, CDN-host allow-list, and expiry check; rate-limited per IP; gated by
+  `CONTRIBUTE_SECRET`). Opt out with `--no-contribute` or `MSDL_NO_CONTRIBUTE=1`.
+- **Redis/Valkey L2 cache** — `REDIS_URL` env var; in-memory cache is seeded from Redis on
+  startup and written through on every fresh fetch, so a backend restart no longer loses
+  crowdsourced links. Falls back to memory-only mode silently if unset/unreachable.
+  Added `github.com/redis/go-redis/v9`.
+- **Web graceful degradation** — `/proxy` responses carry `X-MSDL-Link-Status`
+  (`fresh` / `cached` / `stale`) and `X-MSDL-Link-Expires` headers. A stale (WAF-blocked
+  refresh) response now shows an explicit warning plus an `OfficialFallback` component
+  (data-driven from `products.json`, links to Microsoft's own download page) instead of
+  silently handing out a possibly-dead link.
+- **CLI handoff UI** — `CliHandoff` component on the product page offers the install
+  one-liner + pre-filled `msdl` command as a guaranteed-fresh alternative when the cached
+  link is stale.
+- **CLI telemetry** — `GET /cli/version` (update check) and `POST /telemetry` (anonymous
+  action/platform/version counts, no personal data) endpoints; opt out with
+  `--no-telemetry` / `MSDL_NO_TELEMETRY=1`. Counts surfaced in `/metrics`.
+- **Catalog cleanup** — removed product `48` (Windows 8.1 Single Language), which
+  Microsoft had already pulled server-side (`ERROR [502]: no download links found`).
+- **Distribution** — GitHub Actions release workflow (4-platform binaries on `cli/vX.Y.Z`
+  tags), winget manifest (`starkSV.msdl`), Homebrew tap (`msdl-cli` formula), AUR package
+  (`msdl-bin`), and a `curl | bash` installer for Linux/macOS without Homebrew.
+
+---
+
 ### eval ISOs — PR #13 `feat/evalcenter-isos`
 **Windows Server 2016–2025 + Windows 11 Enterprise evaluation editions**
 
