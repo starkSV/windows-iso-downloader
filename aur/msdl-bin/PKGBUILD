@@ -1,6 +1,6 @@
 # Maintainer: starkSV <shekharvaidya2@gmail.com>
 pkgname=msdl-bin
-pkgver=0.3.5
+pkgver=0.3.6
 pkgrel=1
 pkgdesc="Download Windows ISO files directly from Microsoft's servers"
 arch=('x86_64' 'aarch64')
@@ -10,10 +10,10 @@ provides=('msdl')
 conflicts=('msdl')
 
 source_x86_64=("$pkgname-$pkgver-x86_64::https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv${pkgver}/msdl-linux-amd64")
-sha256sums_x86_64=('dfb0648acd6caa79d597839bb9803c979446a2d77f90447273ee5003d8857c9d')
+sha256sums_x86_64=('b88d3ac5a1896ae107fc51603d6c9287c2eb79906511cd11758e65e1cb41d6a0')
 
 source_aarch64=("$pkgname-$pkgver-aarch64::https://github.com/starkSV/windows-iso-downloader/releases/download/cli%2Fv${pkgver}/msdl-linux-arm64")
-sha256sums_aarch64=('933beb694b3e59fc84cdccfb5cb3dfe48db3274046df88390cf8ee32070f4088')
+sha256sums_aarch64=('350a80ff5f2857fc88c2ee6be78bb5218f3623dfdeaa51a2d875bb6277f3ddd7')
 
 package() {
   install -Dm755 "$srcdir/$pkgname-$pkgver-$CARCH" "$pkgdir/usr/bin/msdl"
