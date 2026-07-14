@@ -12,8 +12,27 @@ LOCALE = "en-US"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 def setup_session():
-    """Initializes a session with Microsoft tracking servers."""
+    """Initializes a session with Microsoft tracking servers.
+
+    Registers the session_id via vlscppe's "permit" endpoint before use --
+    confirmed live that getskuinformationbyproductedition still returns valid
+    data without this for a single lookup, but this script's brute-force
+    range scan makes many rapid consecutive requests, which is a much
+    higher-risk pattern for triggering a Sentinel block than the single-shot
+    case that was tested. The CLI/backend's full session flow additionally
+    replays an ov-df.microsoft.com fingerprint; add that too if this alone
+    turns out not to be enough under real scanning load.
+    """
     session_id = str(uuid.uuid4())
+    try:
+        requests.get(
+            "https://vlscppe.microsoft.com/tags",
+            params={"org_id": "y6jn8c31", "session_id": session_id},
+            headers={"User-Agent": UA},
+            timeout=10,
+        )
+    except Exception as e:
+        logging.warning(f"Session permit call failed (continuing anyway): {e}")
     return session_id
 
 def get_product(product_id, session_id):
@@ -66,13 +85,15 @@ def scan_id(product_id):
     # MS usually puts the release name in the first SKU
     skus = data.get("Skus", [])
     if skus:
-        # Check multiple possible name keys
         s = skus[0]
-        # ReleaseName is often "Windows 10 Version 22H2 (Updated Oct 2025)"
-        name = s.get("EditionName") or s.get("ReleaseName") or s.get("FriendlyName")
+        # Confirmed live 2026-07-14: the real field is "ProductDisplayName"
+        # (e.g. "Windows 11 25H2"), not EditionName/ReleaseName/FriendlyName --
+        # those don't exist in the actual response and always fell through to
+        # the generic fallback below, silently.
+        name = s.get("ProductDisplayName") or s.get("LocalizedProductDisplayName")
         if name:
             return name
-            
+
     return f"Windows Product {product_id}"
 
 if __name__ == "__main__":

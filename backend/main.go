@@ -479,7 +479,8 @@ var validContributeProducts = map[string]bool{
 	"3131": true, "3132": true, "3133": true,
 	"3262": true, "3263": true, "3264": true,
 	"3265": true, "3266": true, "3267": true,
-	"3321": true, "3324": true,
+	"3321": true, "3322": true, "3323": true,
+	"3324": true, "3325": true, "3326": true,
 }
 
 // allowedCDNSuffixes is the CDN host allow-list for contributed download URLs.
