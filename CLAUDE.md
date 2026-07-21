@@ -39,6 +39,10 @@ negative cache (60s), dynamic TTL, stale-on-failure, jitter. Verified in product
 
 ### Known bugs / open issues
 
-- [ ] **`_redirects` Cloudflare Pages** — SPA fallback rule (`/* /index.html 200`) is flagged
-      as an infinite loop and ignored by Cloudflare Pages, potentially causing 404s on
-      direct navigation to non-home routes. Needs investigation and fix.
+- [x] **`_redirects` Cloudflare Pages** — investigated 2026-07-21. The rule was indeed ignored
+      (Cloudflare's deploy log flags it as a false-positive infinite loop), but this turned out
+      to be a non-issue: Cloudflare Pages' own default fallback already serves `index.html` for
+      any unmatched path, so the explicit rule was redundant. Verified live: direct navigation to
+      `/about`, a dynamic route (`/product/3262`), and a genuinely invalid path all return HTTP 200
+      with the correct content (including React Router's own 404 page for the invalid one). Removed
+      `frontend/public/_redirects` entirely to stop the recurring deploy warning.
