@@ -45,6 +45,11 @@ export default function Dock() {
 
   return (
     <>
+      {/* Full-width shelf so the floating desktop dock separates from scrolled content — page bg is
+          near-black (zinc-950), so plain color gradients are invisible; backdrop-blur is what reads.
+          Desktop only: the mobile dock is already a flush full-width bar with no gap to bridge. */}
+      <div className="hidden sm:block fixed inset-x-0 bottom-0 h-24 backdrop-blur-md bg-gradient-to-t from-zinc-950/90 via-zinc-950/60 to-transparent pointer-events-none z-40" />
+
       {/* ── DESKTOP DOCK (sm+) — centered floating pill ── */}
       <div className="hidden sm:flex fixed bottom-5 left-0 right-0 justify-center z-50 pointer-events-none">
         <motion.div

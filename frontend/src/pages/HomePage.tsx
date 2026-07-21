@@ -121,7 +121,7 @@ export default function HomePage() {
           <p className="text-zinc-400 text-base max-w-sm mx-auto mb-6 leading-relaxed">
             Direct links from Microsoft's CDN. No ads. No registration.
           </p>
-          <div className="flex items-center justify-center gap-4 text-[12px] text-zinc-500">
+          <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-zinc-500">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
               Always official
@@ -136,6 +136,16 @@ export default function HomePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />
               Free forever
             </span>
+            <span className="text-zinc-700">·</span>
+            <a
+              href="https://github.com/starkSV/windows-iso-downloader"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 hover:text-zinc-300 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block" />
+              <span className="underline decoration-dotted decoration-zinc-600 underline-offset-4">Open source</span>
+            </a>
           </div>
         </motion.div>
 

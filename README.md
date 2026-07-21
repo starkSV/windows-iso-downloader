@@ -134,8 +134,6 @@ Browser → Backend → (CF Worker) → Microsoft API → Signed CDN URL
           5. Cache result → return to browser
 ```
 
-The flow mirrors [Fido.ps1](https://github.com/pbatard/Fido) by Pete Batard — the same script bundled with Rufus.
-
 Outbound requests to Microsoft are optionally routed through a Cloudflare Worker (`cloudflare-worker/worker.js`). This distributes requests across Cloudflare's global edge IPs instead of a single server IP, preventing Microsoft's rate-limit block (error 715-123130) under high traffic. The Worker is opt-in via environment variables — omit them to go direct to Microsoft.
 
 ### Caching layer
@@ -249,17 +247,17 @@ Valid slugs: `server-2025`, `server-2022`, `server-2019`, `server-2016`, `win11-
 
 ### `POST /contribute`
 
-Accepts a crowdsourced link from the CLI tool to warm the cache. Requires `Authorization: Bearer <CONTRIBUTE_SECRET>` header.
+Accepts a crowdsourced link from the CLI tool to warm the cache. Requires an `X-Contribute-Secret: <CONTRIBUTE_SECRET>` header.
 
 ```json
 {
   "product_id": "3262",
   "sku_id": "0x0409",
-  "response": { /* raw Microsoft JSON */ }
+  "raw_json": { /* raw Microsoft JSON */ }
 }
 ```
 
-Returns `200 OK` on acceptance, `400` on validation failure (expired link, unknown product), `429` on rate limit (~5 req/min per IP).
+Returns `204 No Content` on acceptance; `422` on validation failure (unknown product, invalid SKU, expiry under 1 hour, disallowed download host); `400` on a malformed request body; `401` if the secret header doesn't match; `429` on rate limit (~5 req/min per IP).
 
 ### `GET /metrics?secret=<secret>`
 
@@ -271,9 +269,21 @@ Returns real-time cache statistics for the running instance. Auth via `?secret=`
   "link": { "requests": 38, "cache_hits": 35, "ms_fetches": 3, "neg_hits": 0, "stale": 0, "hit_rate": "92.1%", "cache_size": 6 },
   "eval": { "requests": 12, "cache_hits": 12, "stale": 0, "hit_rate": "100.0%", "cache_size": 5 },
   "neg_cache_size": 0,
-  "total_ms_fetches": 6
+  "total_ms_fetches": 6,
+  "sentinel_errors": 0,
+  "sentinel_distinct_sources_est": 0,
+  "telemetry": {
+    "actions": { "fetch": 364, "eval": 40, "interactive": 14 },
+    "platforms": { "windows": 176, "darwin": 70, "linux": 132 },
+    "products": { "3262": 109, "2618": 95 },
+    "results": { "success": 197, "failed": 221 },
+    "versions": { "0.3.6": 41 },
+    "errors": { "fetching download links: Sentinel marked this request as rejected.": 90 }
+  }
 }
 ```
+
+`sentinel_errors` / `sentinel_distinct_sources_est` track how often Microsoft's Sentinel WAF has blocked the backend's own outbound Microsoft calls. `telemetry` aggregates anonymous CLI usage events (see [Usage telemetry](#usage-telemetry) below) — omitted entirely if no CLI events have been recorded yet.
 
 ---
 
@@ -292,7 +302,6 @@ Returns real-time cache statistics for the running instance. Auth via `?secret=`
 | Windows 10 22H2 | 2618 | x64 / x86 |
 | Windows 10 22H2 Home China | 2378 | x64 |
 | Windows 8.1 | 52 | x64 / x86 |
-| Windows 8.1 Single Language | 48 | x64 / x86 |
 
 ### Evaluation editions (Server & Enterprise)
 

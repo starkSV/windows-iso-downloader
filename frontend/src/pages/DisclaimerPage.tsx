@@ -31,7 +31,7 @@ export default function DisclaimerPage() {
         >
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">Disclaimer</h1>
-            <p className="text-xs font-mono text-zinc-600">Last updated: May 18, 2026</p>
+            <p className="text-xs font-mono text-zinc-600">Last updated: July 16, 2026</p>
           </div>
 
           <div className="p-4 rounded-xl border border-amber-500/15 bg-amber-500/6 text-amber-400/80 text-[12px] leading-relaxed">
@@ -43,7 +43,9 @@ export default function DisclaimerPage() {
             <p>
               MSDL is an independent, open-source project. It is not produced, approved, or supported
               by Microsoft Corporation. The name "Windows" and the Windows logo are registered
-              trademarks of Microsoft Corporation.
+              trademarks of Microsoft Corporation. This applies equally to the website and the{' '}
+              <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">msdl</code>{' '}
+              command-line tool.
             </p>
           </Section>
 
@@ -76,8 +78,9 @@ export default function DisclaimerPage() {
           <Section title="Open source">
             <p>
               The source code is publicly available. You are free to inspect, fork, and self-host
-              this project under the terms of its open-source license. The project credits the
-              open-source Fido script by Pete Batard for the underlying session flow.
+              this project under the terms of its open-source license. See the{' '}
+              <a href="/about" className="text-blue-400 hover:text-blue-300 transition-colors">About page</a>{' '}
+              for credits.
             </p>
           </Section>
         </motion.div>

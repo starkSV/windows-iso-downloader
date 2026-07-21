@@ -49,16 +49,8 @@ export default function AboutPage() {
           <Section title="How it works">
             <p>
               Our backend replicates the session-based authentication flow that Microsoft uses to
-              serve download links to end users. The same approach is used by{' '}
-              <a
-                href="https://github.com/pbatard/Fido"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                Fido
-              </a>{' '}
-              (the PowerShell script bundled with Rufus). The flow is:
+              serve download links to end users — the same technique used by Rufus (credited below).
+              The flow is:
             </p>
             <ol className="list-decimal list-inside space-y-1 text-zinc-500 text-sm">
               <li>Register a session with Microsoft's tracking endpoint</li>
@@ -87,9 +79,22 @@ export default function AboutPage() {
               </code>
             </p>
             <p>
-              Product IDs are maintained manually based on Microsoft's release cadence.
-              Windows 11 25H2, 24H2, Windows 10 22H2, and Windows 8.1 are currently listed.
-              New releases are added as Microsoft publishes them.
+              Product IDs are maintained manually based on Microsoft's release cadence, covering
+              consumer Windows (11, 10, 8.1) as well as Windows Server (2016–2025) and Windows 11
+              Enterprise evaluation editions. New releases are added as Microsoft publishes them —
+              see the <a href="/products" className="text-blue-400 hover:text-blue-300 transition-colors">full catalog</a>.
+            </p>
+          </Section>
+
+          <Section title="CLI tool">
+            <p>
+              MSDL also ships as a standalone command-line tool,{' '}
+              <code className="text-[11px] font-mono bg-white/5 border border-white/7 px-1.5 py-0.5 rounded text-zinc-400">msdl</code>.
+              It runs the same Microsoft session flow directly from your own machine instead of through
+              our backend — useful when Microsoft is rate-limiting our server, since a request from
+              your own connection isn't affected by that. See the{' '}
+              <a href="/cli" className="text-blue-400 hover:text-blue-300 transition-colors">CLI page</a> for
+              install instructions.
             </p>
           </Section>
 

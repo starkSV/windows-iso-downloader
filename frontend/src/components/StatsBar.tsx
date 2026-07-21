@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { useState, useEffect } from 'react'
+import { evalProducts } from '../data/evalProducts'
 
 interface Stat {
   value: string
@@ -7,14 +8,14 @@ interface Stat {
 }
 
 export default function StatsBar() {
-  const [totalReleases, setTotalReleases] = useState('17')
+  const [totalReleases, setTotalReleases] = useState((17 + evalProducts.length).toString())
 
   useEffect(() => {
     fetch('/data/products.json')
       .then(r => r.json())
       .then((data: Record<string, { active?: boolean }>) => {
         const activeCount = Object.values(data).filter(p => p.active !== false).length
-        setTotalReleases(activeCount.toString())
+        setTotalReleases((activeCount + evalProducts.length).toString())
       })
       .catch(() => {})
   }, [])

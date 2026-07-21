@@ -31,14 +31,37 @@ export default function PrivacyPolicyPage() {
         >
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">Privacy Policy</h1>
-            <p className="text-xs font-mono text-zinc-600">Last updated: May 18, 2026</p>
+            <p className="text-xs font-mono text-zinc-600">Last updated: July 16, 2026</p>
           </div>
 
-          <Section title="No data collected">
+          <Section title="No data collected on the website">
             <p>
-              MSDL does not collect, store, log, or share any personally identifiable information.
-              There are no user accounts, no cookies, no analytics trackers, and no third-party
-              advertising scripts of any kind.
+              The MSDL website does not collect, store, log, or share any personally identifiable
+              information. There are no user accounts, no cookies, no analytics trackers, and no
+              third-party advertising scripts of any kind.
+            </p>
+          </Section>
+
+          <Section title="CLI tool: anonymous telemetry and link sharing">
+            <p>
+              The <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">msdl</code>{' '}
+              CLI is a separate, optional download and sends two kinds of anonymous data by default,
+              both of which you can disable:
+            </p>
+            <p>
+              <strong className="text-zinc-400">Usage telemetry</strong> — action type (fetch, eval, list,
+              interactive), platform (Windows/macOS/Linux), CLI version, and whether the run succeeded
+              or failed. No personal data, IP address, or product-key information is included. Disable
+              with <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">--no-telemetry</code>{' '}
+              or the <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">MSDL_NO_TELEMETRY=1</code> environment variable.
+            </p>
+            <p>
+              <strong className="text-zinc-400">Link contribution</strong> — after a successful fetch, the
+              CLI can share the product ID, SKU ID, and Microsoft's raw signed-link response back to our
+              backend, so the next website visitor gets a cached hit instead of a fresh Microsoft request.
+              Only that Microsoft response is shared — nothing about you or your machine. Disable with{' '}
+              <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">--no-contribute</code>{' '}
+              or <code className="text-zinc-400 text-[11px] font-mono bg-white/5 px-1 py-0.5 rounded">MSDL_NO_CONTRIBUTE=1</code>.
             </p>
           </Section>
 

@@ -1,11 +1,22 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ChevronRight } from 'lucide-react'
 
 interface FaqItem {
   q: string
-  a: string
+  a: ReactNode
 }
+
+const repoLink = (
+  <a
+    href="https://github.com/starkSV/windows-iso-downloader"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-blue-400 hover:text-blue-300 transition-colors"
+  >
+    GitHub
+  </a>
+)
 
 const faqs: FaqItem[] = [
   {
@@ -34,7 +45,13 @@ const faqs: FaqItem[] = [
   },
   {
     q: 'Is MSDL open source?',
-    a: 'Yes. Both the frontend and the backend proxy are fully open source. The backend implements the same session-based flow as the Fido PowerShell script, ported to Go and Node.js. You can self-host the entire stack.',
+    a: (
+      <>
+        Yes. Both the frontend and the backend proxy are fully open source, on {repoLink}. The
+        backend and the standalone CLI both implement the same session-based flow as the Fido
+        PowerShell script, ported to Go. You can self-host the entire stack.
+      </>
+    ),
   },
 ]
 
