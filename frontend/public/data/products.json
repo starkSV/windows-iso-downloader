@@ -102,19 +102,19 @@
     },
     "3262": {
         "name": "Windows 11 25H2 (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
         "related": [
+            "3813",
             "3265",
-            "3321",
-            "3113"
+            "3321"
         ]
     },
     "3263": {
         "name": "Windows 11 25H2 Home China (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
@@ -125,7 +125,7 @@
     },
     "3264": {
         "name": "Windows 11 25H2 Pro China (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
@@ -136,19 +136,19 @@
     },
     "3265": {
         "name": "Windows 11 Arm64 25H2 (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
         "related": [
+            "3816",
             "3262",
-            "3321",
-            "3131"
+            "3321"
         ]
     },
     "3266": {
         "name": "Windows 11 Arm64 25H2 Home China (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
@@ -159,7 +159,7 @@
     },
     "3267": {
         "name": "Windows 11 Arm64 25H2 Pro China (26200.6584)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
@@ -170,7 +170,7 @@
     },
     "3321": {
         "name": "Windows 11 25H2 (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
@@ -182,7 +182,7 @@
     },
     "3322": {
         "name": "Windows 11 25H2 Home China (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
@@ -193,7 +193,7 @@
     },
     "3323": {
         "name": "Windows 11 25H2 Pro China (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "x64"
         ],
@@ -204,7 +204,7 @@
     },
     "3324": {
         "name": "Windows 11 Arm64 25H2 (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
@@ -216,7 +216,7 @@
     },
     "3325": {
         "name": "Windows 11 Arm64 25H2 Home China (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
@@ -227,13 +227,81 @@
     },
     "3326": {
         "name": "Windows 11 Arm64 25H2 Pro China (V2)",
-        "badge": "LATEST",
+        "badge": "STABLE",
         "archs": [
             "ARM64"
         ],
         "related": [
             "3324",
             "3325"
+        ]
+    },
+    "3813": {
+        "name": "Windows 11 26H2 (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3816",
+            "3262",
+            "3113"
+        ]
+    },
+    "3814": {
+        "name": "Windows 11 26H2 Home China (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3813",
+            "3815"
+        ]
+    },
+    "3815": {
+        "name": "Windows 11 26H2 Pro China (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "x64"
+        ],
+        "related": [
+            "3813",
+            "3814"
+        ]
+    },
+    "3816": {
+        "name": "Windows 11 Arm64 26H2 (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3813",
+            "3265",
+            "3131"
+        ]
+    },
+    "3817": {
+        "name": "Windows 11 Arm64 26H2 Home China (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3816",
+            "3818"
+        ]
+    },
+    "3818": {
+        "name": "Windows 11 Arm64 26H2 Pro China (26300.9457)",
+        "badge": "LATEST",
+        "archs": [
+            "ARM64"
+        ],
+        "related": [
+            "3816",
+            "3817"
         ]
     }
 }

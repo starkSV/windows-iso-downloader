@@ -298,6 +298,8 @@ Returns real-time cache statistics for the running instance. Auth via `?secret=`
 
 | Product | ID | Architecture |
 |---|---|---|
+| Windows 11 26H2 | 3813 | x64 |
+| Windows 11 26H2 | 3816 | ARM64 |
 | Windows 11 25H2 | 3262 | x64 |
 | Windows 11 25H2 | 3265 | ARM64 |
 | Windows 11 25H2 (V2) | 3321 | x64 |

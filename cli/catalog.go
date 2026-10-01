@@ -35,6 +35,12 @@ var consumerProducts = []Product{
 	{"3324", "Windows 11 Arm64 25H2 (V2)"},
 	{"3325", "Windows 11 Arm64 25H2 Home China (V2)"},
 	{"3326", "Windows 11 Arm64 25H2 Pro China (V2)"},
+	{"3813", "Windows 11 26H2 (26300.9457)"},
+	{"3814", "Windows 11 26H2 Home China (26300.9457)"},
+	{"3815", "Windows 11 26H2 Pro China (26300.9457)"},
+	{"3816", "Windows 11 Arm64 26H2 (26300.9457)"},
+	{"3817", "Windows 11 Arm64 26H2 Home China (26300.9457)"},
+	{"3818", "Windows 11 Arm64 26H2 Pro China (26300.9457)"},
 }
 
 var evalProducts = []EvalProduct{

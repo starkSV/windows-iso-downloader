@@ -7,6 +7,7 @@ import type { Product } from '../types'
 const SITE_URL = 'https://msdl.tech-latest.com'
 
 const quickSearches = [
+  { label: 'Windows 11 26H2', query: '26H2' },
   { label: 'Windows 11 25H2', query: '25H2' },
   { label: 'Windows 11 24H2', query: '24H2' },
   { label: 'Windows 10', query: 'Windows 10' },
