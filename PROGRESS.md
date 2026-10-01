@@ -2,6 +2,31 @@
 
 ## Shipped
 
+### Windows 11 26H2 catalog addition (frontend + backend + CLI)
+
+Microsoft shipped Windows 11 26H2 (build 26300.9457) on 2026-09-29. Added all 6 product IDs
+(x64/ARM64 × plain/Home China/Pro China) across every catalog the project maintains:
+`frontend/public/data/products.json`, `cli/catalog.go`, and `backend/main.go`'s
+`validContributeProducts` allow-list. Build number and ID→arch mapping were cross-confirmed
+against Fido's own `61668a8` commit (same IDs, same build, independent source) rather than
+relying on a single web search, which had initially surfaced a wrong (later) build number
+caught only by testing against the live Microsoft SKU API.
+
+Also:
+- Homepage featured grid now leads with 26H2 as "latest", 25H2 demoted to "stable"; fixed a
+  pre-existing bug where the 26H2/25H2 cards advertised ARM64 but the card's link only ever
+  pointed at the x64 product ID (ARM64 is reached via the detail page's "Also available" list).
+- Two new China-specific featured cards (26H2/25H2 Home China) added after Cloudflare Web
+  Analytics showed China as the single largest traffic source by a wide margin.
+- CLI's interactive bare-`msdl` picker gained a "New:" section above the telemetry-ranked
+  "Popular:" list, so a just-released product gets surfaced before it earns real usage data.
+- `/products` page search got a "Windows 11 26H2" quick-filter chip.
+- `sitemap.xml` was missing all 6 new product URLs entirely — added at priority 0.9 (reflects
+  "latest" status, matching `/products`'s own priority).
+- Added a "What's new in 26H2" content block to the 6 new product pages (sourced from
+  Microsoft's own release coverage, not invented) for on-page SEO, since the previous content
+  model had zero unique body copy per release beyond the dynamic title/meta tags.
+
 ### Sentinel WAF investigation & resilience hardening — backend merged, CLI fix pending
 
 Three weekly `/metrics` + raw docker-log checkpoints (2026-07-14 → 07-21 → 07-31) turned the

@@ -123,16 +123,19 @@ func captureHomepage(t *testing.T, stdin string, latestVersion string) (homepage
 
 func TestShowHomepage_rendersFeaturedAndEval(t *testing.T) {
 	choice, output := captureHomepage(t, "1\n", "")
-	if choice.kind != homepageKindProduct || choice.productID != "3262" {
-		t.Errorf("got %+v, want product 3262", choice)
+	if choice.kind != homepageKindProduct || choice.productID != "3813" {
+		t.Errorf("got %+v, want product 3813 (the New section's entry)", choice)
 	}
 	for _, want := range []string{
-		"1. Windows 11 25H2 (26200.6584)",
-		"2. Windows 10 22H2 v1 (19045.2965)",
-		"6. Windows Server 2025",
-		"7. Windows 11 Enterprise",
+		"New:",
+		"1. Windows 11 26H2 (26300.9457)",
+		"Popular:",
+		"2. Windows 11 25H2 (26200.6584)",
+		"3. Windows 10 22H2 v1 (19045.2965)",
+		"7. Windows Server 2025",
+		"8. Windows 11 Enterprise",
 		`Commands: --list (full catalog) · --help`,
-		`Choice [1-7], search by name, or "list":`,
+		`Choice [1-8], search by name, or "list":`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output missing %q, got:\n%s", want, output)

@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronDown, Download, AlertTriangle, Check, ExternalLink, W
 import { toast } from 'sonner'
 import type { Sku, DownloadOption } from '../types'
 import SystemRequirements from '../components/SystemRequirements'
+import WhatsNew26H2 from '../components/WhatsNew26H2'
 import CliCommand from '../components/CliCommand'
 import RelatedReleases from '../components/RelatedReleases'
 import OfficialFallback from '../components/OfficialFallback'
@@ -739,6 +740,9 @@ export default function ProductDetailPage() {
 
               {/* System requirements */}
               <SystemRequirements isWin11={isWin11(productId!)} />
+
+              {/* What's new — 26H2 only */}
+              {productName.includes('26H2') && <WhatsNew26H2 />}
 
               {/* CLI command */}
               {meta.active && <CliCommand downloadUrl={firstUri} filename={firstFilename} />}

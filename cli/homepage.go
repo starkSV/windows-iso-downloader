@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+// homepageNewIDs are just-released products surfaced ahead of the
+// telemetry-ranked "Popular" list, since a brand-new release has no usage
+// history yet to earn a spot there on its own.
+var homepageNewIDs = []string{"3813"}
+
 // homepageFeaturedIDs are the consumer products shown on the bare `msdl`
 // landing screen, picked from real usage telemetry rather than the full
 // catalog. The full catalog is still one step away via "list".
@@ -44,15 +49,30 @@ func showHomepage(latestVersion string) (homepageChoice, error) {
 	fmt.Fprintln(os.Stderr, homepageRule)
 	fmt.Fprintln(os.Stderr)
 
+	newReleases := make([]Product, 0, len(homepageNewIDs))
+	for _, id := range homepageNewIDs {
+		if p, ok := findProductByID(id); ok {
+			newReleases = append(newReleases, p)
+		}
+	}
+	if len(newReleases) > 0 {
+		fmt.Fprintln(os.Stderr, "New:")
+		for i, p := range newReleases {
+			fmt.Fprintf(os.Stderr, "%d. %s\n", i+1, p.Name)
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
 	fmt.Fprintln(os.Stderr, "Popular:")
-	featured := make([]Product, 0, len(homepageFeaturedIDs))
+	featured := make([]Product, len(newReleases), len(newReleases)+len(homepageFeaturedIDs))
+	copy(featured, newReleases)
 	for _, id := range homepageFeaturedIDs {
 		if p, ok := findProductByID(id); ok {
 			featured = append(featured, p)
 		}
 	}
-	for i, p := range featured {
-		fmt.Fprintf(os.Stderr, "%d. %s\n", i+1, p.Name)
+	for i, p := range featured[len(newReleases):] {
+		fmt.Fprintf(os.Stderr, "%d. %s\n", len(newReleases)+i+1, p.Name)
 	}
 	fmt.Fprintln(os.Stderr)
 

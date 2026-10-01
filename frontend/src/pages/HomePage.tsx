@@ -13,22 +13,22 @@ const SITE_URL = 'https://msdl.tech-latest.com'
 
 const featured = [
   {
+    id: '3813',
+    name: 'Windows 11',
+    version: '26H2',
+    build: '26300.9457',
+    description: 'The latest Windows 11 release with AI features and improved performance.',
+    badge: 'latest' as const,
+    archs: ['x64'],
+  },
+  {
     id: '3262',
     name: 'Windows 11',
     version: '25H2',
     build: '26200.6584',
-    description: 'The latest Windows 11 release with AI features and improved performance.',
-    badge: 'latest' as const,
-    archs: ['x64', 'ARM64'],
-  },
-  {
-    id: '3113',
-    name: 'Windows 11',
-    version: '24H2',
-    build: '26100.1742',
     description: 'The widely deployed stable release. Recommended for enterprise environments.',
     badge: 'stable' as const,
-    archs: ['x64', 'ARM64'],
+    archs: ['x64'],
   },
   {
     id: '2618',
@@ -47,6 +47,24 @@ const featured = [
     description: 'Legacy release for older hardware compatibility and historical reference.',
     badge: 'legacy' as const,
     archs: ['x64', 'x86'],
+  },
+  {
+    id: '3814',
+    name: 'Windows 11',
+    version: '26H2 China',
+    build: '26300.9457',
+    description: 'The latest release for the Chinese market. Simplified Chinese only, x64.',
+    badge: 'latest' as const,
+    archs: ['x64'],
+  },
+  {
+    id: '3263',
+    name: 'Windows 11',
+    version: '25H2 China',
+    build: '26200.6584',
+    description: 'The widely downloaded China edition. Simplified Chinese only, x64.',
+    badge: 'stable' as const,
+    archs: ['x64'],
   },
 ]
 
